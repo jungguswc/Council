@@ -100,7 +100,7 @@
 <script>
 var S = { db:null, today:'', user:'', canEdit:false, view:'home',
   f:{ orgType:'실무분과', orgName:'', date:'', q:'', hideContact:false },
-  hf:{ type:'', year:'' }, af:{ year:'', type:'' }, mq:'', importRows:null, expireDays:60 };
+  hf:{ type:'', year:'' }, af:{ year:'', type:'', event:'', name:'' }, mq:'', importRows:null, expireDays:60 };
 try { var d0 = parseInt(localStorage.getItem('expireDays'),10); if (d0) S.expireDays = d0; } catch(e) {}
 var COUNCIL = '중구지역사회보장협의체';
 var VIEWS = [['home','처음 화면'],['roster','명단 조회'],['members','위원 찾기'],['awards','유공표창'],['history','변동이력'],['import','일괄 등록'],['settings','설정']];
@@ -138,6 +138,8 @@ function stTag(s) { var c = ['재직','해촉','사임','임기만료'].indexOf(
 function fmt(d) { return d ? d.replace(/-/g, '.') : ''; }
 function member(id) { return L_find(S.db.members, id) || {}; }
 function curAppts(mid, date) { return S.db.appts.filter(function (a) { return a.memberId === mid && L_activeOn(a, date || S.today); }); }
+function nameKey(v) { return String(v || '').replace(/\s+/g, ''); }
+function nameHit(name, q) { q = nameKey(q); return !q || nameKey(name).indexOf(q) >= 0; }
 function needEdit() { if (!S.canEdit) { alertMsg('조회 전용 권한입니다. 변경은 관리자만 할 수 있습니다.'); return false; } return true; }
 function openModal(h) { document.getElementById('mbox').innerHTML = h; document.getElementById('modal').style.display = 'flex'; window.scrollTo(0,0); }
 function closeModal() { document.getElementById('modal').style.display = 'none'; }
@@ -227,7 +229,7 @@ function vRoster() {
     '<label class="f">협의체 구분<select onchange="S.f.orgType=this.value;S.f.orgName=\'\';render()">' + opts(ORG_TYPES, f.orgType) + '</select></label>' +
     '<label class="f">' + (f.orgType === '동협의체' ? '동' : '분과/위원회') + '<select onchange="S.f.orgName=this.value;render()">' + opts(names, f.orgName, names.length > 1 ? '전체' : undefined) + '</select></label>' +
     '<label class="f">기준일자<input type="date" value="' + f.date + '" onchange="S.f.date=this.value||S.today;render()"></label>' +
-    '<label class="f">검색<input placeholder="성명, 소속" value="' + esc(f.q) + '" oninput="S.f.q=this.value;renderRosterTable()"></label>' +
+    '<label class="f">성명 검색<input placeholder="이름만 입력" value="' + esc(f.q) + '" oninput="S.f.q=this.value;renderRosterTable()"></label>' +
     '<span class="sp"></span>' +
     (S.canEdit ? '<button class="b p" onclick="formAppoint()">+ 위원 위촉</button>' : '') + '</div>' +
     '<div class="bar"><label><input type="checkbox" ' + (f.hideContact ? 'checked' : '') + ' onchange="S.f.hideContact=this.checked"> 출력할 때 연락처 빼기</label><span class="sp"></span>' +
@@ -238,30 +240,38 @@ function vRoster() {
 }
 function renderRosterTable() {
   var f = S.f, el = document.getElementById('rt'); if (!el) return;
-  var list = f.orgName ? [f.orgName] : orgNames(f.orgType), q = f.q.trim(), h = '', total = 0;
-  list.forEach(function (n) {
-    var rows = L_roster(S.db, f.orgType, n, f.date).filter(function (r) { return !q || (r.member.name + r.member.agency + r.member.position).indexOf(q) >= 0; });
+  var q = nameKey(f.q), h = '', total = 0, list = [];
+  if (q) ORG_TYPES.forEach(function (t) { orgNames(t).forEach(function (n) { list.push([t, n]); }); });
+  else (f.orgName ? [f.orgName] : orgNames(f.orgType)).forEach(function (n) { list.push([f.orgType, n]); });
+  list.forEach(function (tn) {
+    var n = tn[1], rows = L_roster(S.db, tn[0], n, f.date).filter(function (r) { return nameHit(r.member.name, q); });
     total += rows.length;
-    if (list.length > 1) { if (!rows.length) return; h += '<div class="orghead">' + esc(n) + ' <span class="muted">' + rows.length + '명</span></div>'; }
+    if (list.length > 1) { if (!rows.length) return; h += '<div class="orghead">' + esc(tn[0] === n ? n : tn[0] + ' · ' + n) + ' <span class="muted">' + rows.length + '명</span></div>'; }
     h += '<div class="scroll"><table class="t"><tr><th>연번</th><th>소속</th><th>직위</th><th>성명</th><th>연락처</th><th>직책</th><th>위촉구분</th><th>임기</th><th>상태</th></tr>' +
       (rows.length ? rows.map(function (r, i) { var m = r.member, a = r.appt, st = L_status(a, f.date);
         var soon = a.termEnd && a.termEnd >= f.date && a.termEnd <= L_addDays(f.date, S.expireDays);
         return '<tr class="click" onclick="showMember(\'' + m.id + '\')"><td>' + (i + 1) + '</td><td>' + esc(m.agency) + '</td><td>' + esc(m.position) + '</td><td><b>' + esc(m.name) + '</b></td><td class="pre">' + esc([m.mobile, m.office, m.fax ? 'F.' + m.fax : ''].filter(Boolean).join('\n')) + '</td><td>' + esc(a.role) + '</td><td>' + esc(a.kind) + '</td><td>' + (a.termStart || a.termEnd ? fmt(a.termStart) + ' ~<br>' + '<span class="' + (soon ? 'warn' : '') + '">' + fmt(a.termEnd) + '</span>' : '<span class="muted">임기 없음<br>' + fmt(a.from) + '~</span>') + '</td><td>' + stTag(st) + '</td></tr>'; }).join('')
       : '<tr><td colspan="9" class="muted">' + fmt(f.date) + ' 기준 재직 위원이 없습니다.</td></tr>') + '</table></div>';
   });
-  el.innerHTML = '<div class="muted" style="margin-bottom:6px">' + fmt(f.date) + ' 기준 ' + total + '명</div>' + h;
+  if (q && !total) h = '<div class="muted">' + fmt(f.date) + ' 기준으로 \'' + esc(f.q.trim()) + '\' 이름의 재직 위원이 없습니다. 지난 위원은 [위원 찾기]에서 찾을 수 있습니다.</div>';
+  el.innerHTML = '<div class="muted" style="margin-bottom:6px">' + (q ? '성명 \'' + esc(f.q.trim()) + '\' 검색 · 모든 협의체 · ' : '') + fmt(f.date) + ' 기준 ' + total + '명</div>' + h;
 }
 
 function vMembers() {
-  var q = S.mq.trim();
-  var list = S.db.members.filter(function (m) { return !q || (m.name + m.agency + m.position + m.mobile).indexOf(q) >= 0; })
+  var q = nameKey(S.mq);
+  var list = S.db.members.filter(function (m) { return nameHit(m.name, q); })
     .sort(function (a, b) { return a.name.localeCompare(b.name, 'ko'); });
-  var h = '<div class="card"><div class="bar"><label class="f">성명·소속·연락처로 찾기<input id="mq" value="' + esc(S.mq) + '" oninput="S.mq=this.value;clearTimeout(window._mq);window._mq=setTimeout(function(){render();var e=document.getElementById(\'mq\');e.focus();e.setSelectionRange(e.value.length,e.value.length);},250)"></label><span class="sp"></span><span class="muted">전체 ' + S.db.members.length + '명 중 ' + list.length + '명</span></div>';
-  h += '<div class="scroll"><table class="t"><tr><th>성명</th><th>소속기관</th><th>직위</th><th>휴대폰</th><th>현재 소속 협의체</th><th>표창</th></tr>' + list.slice(0, 300).map(function (m) {
-    var cur = curAppts(m.id).map(function (a) { return a.orgName + (a.role !== '위원' ? '(' + a.role + ')' : ''); }).join(', ');
-    var aw = S.db.awards.filter(function (w) { return w.memberId === m.id && !w.canceled; }).length;
-    return '<tr class="click" onclick="showMember(\'' + m.id + '\')"><td><b>' + esc(m.name) + '</b></td><td>' + esc(m.agency) + '</td><td>' + esc(m.position) + '</td><td>' + esc(m.mobile) + '</td><td>' + (cur ? esc(cur) : '<span class="muted">없음</span>') + '</td><td>' + (aw ? aw + '건' : '') + '</td></tr>';
-  }).join('') + '</table></div></div>';
+  var others = q ? S.db.awards.filter(function (w) { return !w.canceled && !w.memberId && nameHit(w.personName, q); }) : [];
+  var h = '<div class="card"><div class="bar"><label class="f">성명으로 찾기<input id="mq" placeholder="이름만 입력" value="' + esc(S.mq) + '" oninput="S.mq=this.value;clearTimeout(window._mq);window._mq=setTimeout(function(){render();var e=document.getElementById(\'mq\');e.focus();e.setSelectionRange(e.value.length,e.value.length);},250)"></label><span class="sp"></span><span class="muted">전체 ' + S.db.members.length + '명 중 ' + list.length + '명</span></div>';
+  h += '<div class="scroll"><table class="t"><tr><th>성명</th><th>소속기관</th><th>직위</th><th>휴대폰</th><th>현재 소속 협의체</th><th>지난 소속</th><th>유공표창</th></tr>' + (list.slice(0, 300).map(function (m) {
+    var cur = curAppts(m.id), curIds = cur.map(function (a) { return a.id; });
+    var curTxt = cur.map(function (a) { return a.orgName + (a.role && a.role !== '위원' ? '(' + a.role + ')' : ''); }).join(', ');
+    var past = {}; S.db.appts.forEach(function (a) { if (a.memberId === m.id && curIds.indexOf(a.id) < 0) past[a.orgName] = 1; });
+    var aw = S.db.awards.filter(function (w) { return w.memberId === m.id && !w.canceled; }).sort(function (a, b) { return a.year < b.year ? 1 : -1; });
+    var awTxt = aw.map(function (w) { return w.year + ' ' + [w.event, w.awardType].filter(Boolean).join(' '); }).join('\n');
+    return '<tr class="click" onclick="showMember(\'' + m.id + '\')"><td><b>' + esc(m.name) + '</b></td><td>' + esc(m.agency) + '</td><td>' + esc(m.position) + '</td><td>' + esc(m.mobile) + '</td><td>' + (curTxt ? esc(curTxt) : '<span class="muted">없음</span>') + '</td><td class="muted">' + esc(Object.keys(past).join(', ')) + '</td><td class="pre">' + esc(awTxt) + '</td></tr>';
+  }).join('') || '<tr><td colspan="7" class="muted">해당 이름의 위원이 없습니다.</td></tr>') + '</table></div>' + (list.length > 300 ? '<div class="muted">앞의 300명만 보입니다. 이름을 더 입력해 주세요.</div>' : '') + '</div>';
+  if (others.length) h += '<div class="card"><h2>위원이 아닌 표창 수상자</h2><div class="scroll"><table class="t"><tr><th>연도</th><th>수여 행사</th><th>훈격</th><th>성명</th><th>소속</th></tr>' + others.map(function (w) { return '<tr><td>' + w.year + '</td><td>' + esc(w.event) + '</td><td>' + esc(w.awardType) + '</td><td><b>' + esc(w.personName) + '</b></td><td>' + esc([w.personAgency, w.personPosition].filter(Boolean).join(' ')) + '</td></tr>'; }).join('') + '</table></div></div>';
   return h;
 }
 
@@ -282,21 +292,30 @@ function vHistory() {
     '<button class="b" onclick="xlsxHistory()">엑셀 내려받기</button></div>' + histTable(rows) + '</div>';
 }
 
+function awardRows() {
+  var f = S.af;
+  return S.db.awards.filter(function (w) { return !w.canceled && (!f.year || w.year === f.year) && (!f.type || w.awardType === f.type) && (!f.event || w.event === f.event) && (!f.name || w.awardName === f.name); })
+    .sort(function (a, b) { return a.year === b.year ? ((a.event || '') + (a.date || '') < (b.event || '') + (b.date || '') ? -1 : 1) : (a.year < b.year ? 1 : -1); });
+}
 function vAwards() {
-  var aw = S.db.awards.filter(function (w) { return !w.canceled; });
-  var years = {}; aw.forEach(function (w) { years[w.year] = 1; });
-  var ys = Object.keys(years).sort().reverse(), types = S.db.awardTypes.map(function (t) { return t.name; });
-  aw.forEach(function (w) { if (types.indexOf(w.awardType) < 0) types.push(w.awardType); });
-  var h = '<div class="card"><h2>연도별 표창 현황</h2><div class="scroll"><table class="t"><tr><th>연도</th>' + types.map(function (t) { return '<th>' + esc(t) + '</th>'; }).join('') + '<th>합계</th></tr>';
-  h += ys.map(function (y) { var sum = 0; return '<tr class="click" onclick="S.af.year=\'' + y + '\';render()"><td><b>' + y + '년</b></td>' + types.map(function (t) { var n = aw.filter(function (w) { return w.year === y && w.awardType === t; }).length; sum += n; return '<td>' + (n || '') + '</td>'; }).join('') + '<td><b>' + sum + '</b></td></tr>'; }).join('') || '<tr><td colspan="' + (types.length + 2) + '" class="muted">등록된 표창이 없습니다.</td></tr>';
-  h += '</table></div></div>';
-  var rows = aw.filter(function (w) { return (!S.af.year || w.year === S.af.year) && (!S.af.type || w.awardType === S.af.type); })
-    .sort(function (a, b) { return a.year === b.year ? (a.date < b.date ? 1 : -1) : (a.year < b.year ? 1 : -1); });
-  h += '<div class="card"><div class="bar"><label class="f">연도<select onchange="S.af.year=this.value;render()">' + opts(ys, S.af.year, '전체') + '</select></label>' +
-    '<label class="f">표창 종류<select onchange="S.af.type=this.value;render()">' + opts(types, S.af.type, '전체') + '</select></label><span class="sp"></span>' +
-    (S.canEdit ? '<button class="b p" onclick="formAward()">+ 표창 등록</button>' : '') + '<button class="b" onclick="xlsxAwards()">엑셀 내려받기</button></div>';
-  h += '<div class="scroll"><table class="t"><tr><th>연도</th><th>수상일</th><th>표창</th><th>성명</th><th>소속기관</th><th>당시 소속 협의체</th><th>공적·명칭</th><th>비고</th></tr>' + (rows.map(function (w) { var m = member(w.memberId);
-    return '<tr class="click" onclick="showMember(\'' + w.memberId + '\')"><td>' + w.year + '</td><td>' + fmt(w.date) + '</td><td><b>' + esc(w.awardType) + '</b></td><td>' + esc(m.name) + '</td><td>' + esc(m.agency) + '</td><td>' + esc(w.orgAtTime) + '</td><td>' + esc(w.title) + '</td><td>' + esc(w.memo) + '</td></tr>'; }).join('') || '<tr><td colspan="8" class="muted">해당 기록이 없습니다.</td></tr>') + '</table></div></div>';
+  var aw = S.db.awards.filter(function (w) { return !w.canceled; }), f = S.af;
+  function uniq(k) { var o = {}; aw.forEach(function (w) { if (w[k]) o[w[k]] = 1; }); return Object.keys(o).sort(); }
+  var ys = uniq('year').reverse(), types = uniq('awardType'), events = uniq('event'), names = uniq('awardName');
+  function matrix(title, key, cols) {
+    if (!cols.length) return '';
+    var h = '<h2 style="margin-top:6px">' + title + '</h2><div class="scroll"><table class="t"><tr><th>연도</th>' + cols.map(function (t) { return '<th>' + esc(t) + '</th>'; }).join('') + '<th>합계</th></tr>';
+    h += ys.map(function (y) { var sum = 0; return '<tr class="click" onclick="S.af.year=\'' + y + '\';render()"><td><b>' + y + '년</b></td>' + cols.map(function (t) { var n = aw.filter(function (w) { return w.year === y && w[key] === t; }).length; sum += n; return '<td>' + (n || '') + '</td>'; }).join('') + '<td><b>' + sum + '</b></td></tr>'; }).join('');
+    return h + '</table></div>';
+  }
+  var h = '<div class="card">' + (aw.length ? matrix('연도별 수여 행사', 'event', events) + matrix('연도별 훈격', 'awardType', types) : '<h2>연도별 표창 현황</h2><div class="muted">등록된 표창이 없습니다.</div>') + '</div>';
+  var rows = awardRows();
+  h += '<div class="card"><div class="bar"><label class="f">연도<select onchange="S.af.year=this.value;render()">' + opts(ys, f.year, '전체') + '</select></label>' +
+    '<label class="f">수여 행사<select onchange="S.af.event=this.value;render()">' + opts(events, f.event, '전체') + '</select></label>' +
+    '<label class="f">표창명<select onchange="S.af.name=this.value;render()">' + opts(names, f.name, '전체') + '</select></label>' +
+    '<label class="f">훈격<select onchange="S.af.type=this.value;render()">' + opts(types, f.type, '전체') + '</select></label><span class="sp"></span>' +
+    (S.canEdit ? '<button class="b p" onclick="formAward()">+ 표창 등록</button><button class="b" onclick="formAwardImport()">표창 일괄 등록</button>' : '') + '<button class="b" onclick="xlsxAwards()">엑셀 내려받기</button></div>';
+  h += '<div class="muted" style="margin-bottom:6px">' + rows.length + '건</div><div class="scroll"><table class="t"><tr><th>연도</th><th>수여 행사</th><th>표창명</th><th>훈격</th><th>성명</th><th>소속</th><th>위원 여부</th><th>공적</th><th>비고</th></tr>' + (rows.map(function (w) { var p = L_awardPerson(S.db, w);
+    return '<tr' + (p.isMember ? ' class="click" onclick="showMember(\'' + w.memberId + '\')"' : (S.canEdit ? ' class="click" onclick="formCancelAward(\'' + w.id + '\')"' : '')) + '><td>' + w.year + '</td><td>' + esc(w.event) + '</td><td>' + esc(w.awardName) + '</td><td><b>' + esc(w.awardType) + '</b></td><td>' + esc(p.name) + '</td><td>' + esc([p.agency, p.position].filter(Boolean).join(' ')) + '</td><td>' + (p.isMember ? '<span class="tag st-재직">위원</span> <span class="muted">' + esc(w.orgAtTime) + '</span>' : '<span class="tag st-기타">위원 아님</span>') + '</td><td>' + esc(w.title) + '</td><td>' + esc(w.memo) + '</td></tr>'; }).join('') || '<tr><td colspan="9" class="muted">해당 기록이 없습니다.</td></tr>') + '</table></div></div>';
   return h;
 }
 
@@ -385,8 +404,8 @@ function showMember(id) {
     var act = S.canEdit ? '<td>' + (!a.endDate ? ['연임', '직책변경', '소속변경', '해촉', '사임'].map(function (t) { return '<button class="b s' + (t === '해촉' || t === '사임' ? ' d' : '') + '" onclick="formChange(\'' + a.id + '\',\'' + t + '\')">' + t + '</button>'; }).join(' ') + ' ' : '') + '<button class="b s" onclick="formFix(\'' + a.id + '\')">정정</button></td>' : '';
     return '<tr><td>' + esc(a.orgType === a.orgName ? a.orgName : a.orgType + ' · ' + a.orgName) + '</td><td>' + esc(a.role) + '</td><td>' + esc(a.kind) + '</td><td>' + (a.termStart || a.termEnd ? fmt(a.termStart) + ' ~ ' + fmt(a.termEnd) : '<span class="muted">임기 없음</span>') + '</td><td class="muted">' + fmt(a.from) + ' ~ ' + fmt(a.endDate) + '</td><td>' + stTag(st) + '</td>' + act + '</tr>';
   }).join('') + '</table></div>' + (S.canEdit ? '<div class="actions"><button class="b p" onclick="formAppoint(\'' + id + '\')">+ 다른 협의체에 추가 위촉</button></div>' : '') + '</div>';
-  h += '<div class="card"><h2>유공표창</h2>' + (aw.length ? '<table class="t"><tr><th>연도</th><th>표창</th><th>공적·명칭</th><th>당시 소속</th><th></th></tr>' + aw.map(function (w) {
-    return '<tr' + (w.canceled ? ' style="text-decoration:line-through;color:#999"' : '') + '><td>' + w.year + '</td><td><b>' + esc(w.awardType) + '</b></td><td>' + esc(w.title) + '</td><td>' + esc(w.orgAtTime) + '</td><td>' + (w.canceled ? '취소됨' : (S.canEdit ? '<button class="b s d" onclick="formCancelAward(\'' + w.id + '\')">취소</button>' : '')) + '</td></tr>'; }).join('') + '</table>' : '<div class="muted">기록이 없습니다.</div>') +
+  h += '<div class="card"><h2>유공표창</h2>' + (aw.length ? '<table class="t"><tr><th>연도</th><th>수여 행사·표창명</th><th>훈격</th><th>공적</th><th>당시 소속</th><th></th></tr>' + aw.map(function (w) {
+    return '<tr' + (w.canceled ? ' style="text-decoration:line-through;color:#999"' : '') + '><td>' + w.year + '</td><td>' + esc([w.event, w.awardName].filter(Boolean).join(' · ')) + '</td><td><b>' + esc(w.awardType) + '</b></td><td>' + esc(w.title) + '</td><td>' + esc(w.orgAtTime) + '</td><td>' + (w.canceled ? '취소됨' : (S.canEdit ? '<button class="b s d" onclick="formCancelAward(\'' + w.id + '\')">취소</button>' : '')) + '</td></tr>'; }).join('') + '</table>' : '<div class="muted">기록이 없습니다.</div>') +
     (S.canEdit ? '<div class="actions"><button class="b" onclick="formAward(\'' + id + '\')">+ 표창 등록</button></div>' : '') + '</div>';
   h += '<div class="card"><h2>변동이력</h2>' + histTable(hist) + '</div><div class="actions"><button class="b" onclick="closeModal()">닫기</button></div>';
   openModal(h);
@@ -461,20 +480,57 @@ function formFix(aid) {
 }
 function formAward(mid) {
   if (!needEdit()) return;
-  var who = mid ? '<input type="hidden" id="x_mid" value="' + mid + '"><div><div class="muted">위원</div><b>' + esc(member(mid).name) + '</b> ' + esc(member(mid).agency) + '</div>'
-    : '<label class="f w2">위원 *<select id="x_mid">' + opts(S.db.members.slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'ko'); }).map(function (m) { return [m.id, m.name + ' (' + m.agency + ')']; }), '', '선택') + '</select></label>';
-  openModal('<h3>유공표창 등록</h3><div class="form">' + who + '<label class="f">표창 종류 *<select id="x_type">' + opts(S.db.awardTypes.map(function (t) { return t.name; }), '', '선택') + '</select></label>' +
+  var who = mid ? '<input type="hidden" id="x_mid" value="' + mid + '"><div class="w2"><div class="muted">수상자</div><b>' + esc(member(mid).name) + '</b> ' + esc(member(mid).agency) + '</div>'
+    : '<label class="f w2">수상자 (위원이면 선택)<select id="x_mid" onchange="document.getElementById(\'nonmem\').style.display=this.value?\'none\':\'contents\'">' + opts(S.db.members.slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'ko'); }).map(function (m) { return [m.id, m.name + ' (' + m.agency + ')']; }), '', '위원 아님 (아래에 직접 입력)') + '</select></label>' +
+      '<div id="nonmem" style="display:contents"><label class="f">성명 *<input id="x_pname"></label><label class="f">소속<input id="x_pagency"></label><label class="f">직위<input id="x_ppos"></label></div>';
+  function dl(id, list) { return '<datalist id="' + id + '">' + list.map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist>'; }
+  var evs = AWARD_EVENTS.slice(), nms = AWARD_NAMES.slice();
+  S.db.awards.forEach(function (w) { if (w.event && evs.indexOf(w.event) < 0) evs.push(w.event); if (w.awardName && nms.indexOf(w.awardName) < 0) nms.push(w.awardName); });
+  openModal('<h3>유공표창 등록</h3><div class="form">' + who +
     '<label class="f">수상 연도 *<input id="x_year" type="number" value="' + S.today.slice(0, 4) + '"></label><label class="f">수상일<input type="date" id="x_date"></label>' +
-    '<label class="f w2">공적·명칭<input id="x_title" placeholder="예: 사회복지의 날 유공"></label><label class="f">당시 소속(비우면 자동)<input id="x_org"></label><label class="f">비고<input id="x_memo"></label>' + reasonFields() + '</div>' +
+    '<label class="f">수여 행사<input id="x_event" list="dl_ev" placeholder="예: 중구복지박람회">' + dl('dl_ev', evs) + '</label>' +
+    '<label class="f">표창명<input id="x_aname" list="dl_nm" placeholder="예: 지역복지유공표창">' + dl('dl_nm', nms) + '</label>' +
+    '<label class="f">훈격 *<input id="x_type" list="dl_ty" placeholder="예: 중구청장상">' + dl('dl_ty', S.db.awardTypes.map(function (t) { return t.name; })) + '</label>' +
+    '<label class="f w2">공적<input id="x_title" placeholder="예: 지역복지 증진 유공"></label><label class="f">비고<input id="x_memo"></label>' + reasonFields() + '</div>' +
     '<div class="actions"><button class="b" onclick="' + (mid ? 'showMember(\'' + mid + '\')' : 'closeModal()') + '">취소</button><button class="b p" onclick="saveAward(' + (mid ? 'true' : 'false') + ')">등록</button></div>');
 }
+
 function saveAward(back) {
   var mid = v('x_mid');
-  op('addAward', { memberId: mid, awardType: v('x_type'), year: v('x_year'), date: v('x_date'), title: v('x_title'), orgAtTime: v('x_org'), memo: v('x_memo'), reason: v('x_reason'), basis: v('x_basis') }, back ? function () { showMember(mid); } : null);
+  op('addAward', { memberId: mid, personName: v('x_pname'), personAgency: v('x_pagency'), personPosition: v('x_ppos'), awardType: v('x_type'), awardName: v('x_aname'), event: v('x_event'), year: v('x_year'), date: v('x_date'), title: v('x_title'), memo: v('x_memo'), reason: v('x_reason'), basis: v('x_basis') }, back ? function () { showMember(mid); } : null);
 }
+var AWARD_COLS = [['year', '연도'], ['date', '수상일'], ['event', '수여행사'], ['awardName', '표창명'], ['awardType', '훈격'], ['personName', '성명'], ['personAgency', '소속'], ['personPosition', '직위'], ['title', '공적'], ['memo', '비고']];
+function formAwardImport() {
+  openModal('<h3>표창 일괄 등록</h3><ol class="muted" style="line-height:1.8;margin-top:0"><li>[양식 내려받기]로 엑셀 양식을 받습니다.</li><li>연도·수여행사·표창명·훈격·성명·소속을 채웁니다. 위원 명단에 있는 분은 성명으로 자동 연결되고, 없는 분은 "위원 아님"으로 기록됩니다.</li><li>[엑셀 파일 선택]으로 올리고 미리보기를 확인한 뒤 등록합니다.</li></ol>' +
+    '<div class="bar"><button class="b" onclick="xlsxAwardTemplate()">양식 내려받기</button><label class="b">엑셀 파일 선택<input type="file" accept=".xlsx,.xls" style="display:none" onchange="readAwardImport(this.files[0])"></label></div><div id="awprev"></div>' +
+    '<div class="actions"><button class="b" onclick="closeModal()">닫기</button></div>');
+}
+function xlsxAwardTemplate() {
+  var ws = XLSX.utils.aoa_to_sheet([AWARD_COLS.map(function (c) { return c[1]; }), ['2025', '', '중구복지박람회', '지역복지유공표창', '중구청장상', '홍길동(예시)', '(예시)가상복지관', '팀장', '지역복지 증진 유공', '']]);
+  ws['!cols'] = AWARD_COLS.map(function () { return { wch: 14 }; });
+  var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '표창등록양식'); XLSX.writeFile(wb, '유공표창_일괄등록양식.xlsx');
+}
+function readAwardImport(file) {
+  if (!file) return;
+  var rd = new FileReader();
+  rd.onload = function (e) {
+    var wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+    var rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', raw: false, dateNF: 'yyyy-mm-dd' });
+    var head = rows.shift().map(function (h) { return String(h).replace(/\s/g, ''); });
+    S.awardRows = rows.filter(function (r) { return r.join('').trim(); }).map(function (r) { var o = {}; AWARD_COLS.forEach(function (c) { var i = head.indexOf(c[1]); o[c[0]] = i >= 0 ? String(r[i]).trim() : ''; }); return o; });
+    var names = {}; S.db.members.forEach(function (m) { names[String(m.name).replace(/\s/g, '')] = (names[String(m.name).replace(/\s/g, '')] || 0) + 1; });
+    document.getElementById('awprev').innerHTML = '<div class="scroll" style="max-height:340px;overflow:auto"><table class="t"><tr><th>#</th><th>연도</th><th>행사</th><th>표창명</th><th>훈격</th><th>성명</th><th>소속</th><th>확인</th></tr>' + S.awardRows.map(function (x, i) {
+      var nm = x.personName.replace(/\s/g, ''), bad = !nm ? '성명 없음' : !/^\d{4}$/.test(x.year.replace(/\D/g, '')) ? '연도 확인' : !x.awardType ? '훈격 없음' : '';
+      var link = names[nm] === 1 ? '<span class="tag st-재직">위원 연결</span>' : names[nm] > 1 ? '<span class="tag st-임기만료">동명이인: 소속으로 구분</span>' : '<span class="tag st-기타">위원 아님</span>';
+      return '<tr><td>' + (i + 1) + '</td><td>' + esc(x.year) + '</td><td>' + esc(x.event) + '</td><td>' + esc(x.awardName) + '</td><td>' + esc(x.awardType) + '</td><td>' + esc(x.personName) + '</td><td>' + esc(x.personAgency) + '</td><td>' + (bad ? '<span style="color:var(--red)">' + bad + '</span>' : link) + '</td></tr>'; }).join('') +
+      '</table></div><div class="actions"><button class="b p" onclick="op(\'bulkAwards\',{rows:S.awardRows,reason:\'표창 명단 일괄 등록\'},function(){S.awardRows=null})">' + S.awardRows.length + '건 등록</button></div>';
+  };
+  rd.readAsArrayBuffer(file);
+}
+
 function formCancelAward(wid) {
   var w = L_find(S.db.awards, wid);
-  openModal('<h3>표창 기록 취소</h3><p>' + w.year + '년 ' + esc(w.awardType) + ' 기록을 취소 표시합니다. 기록은 지워지지 않고 취소선으로 남습니다.</p><div class="form">' + reasonFields() + '</div><div class="actions"><button class="b" onclick="showMember(\'' + w.memberId + '\')">돌아가기</button><button class="b p d" onclick="op(\'cancelAward\',{id:\'' + wid + '\',reason:v(\'x_reason\'),basis:v(\'x_basis\')},function(){showMember(\'' + w.memberId + '\')})">취소 처리</button></div>');
+  openModal('<h3>표창 기록 취소</h3><p>' + esc(L_awardPerson(S.db, w).name) + ' · ' + esc(L_awardText(w)) + ' 기록을 취소 표시합니다. 기록은 지워지지 않고 취소선으로 남습니다.</p><div class="form">' + reasonFields() + '</div><div class="actions"><button class="b" onclick="showMember(\'' + w.memberId + '\')">돌아가기</button><button class="b p d" onclick="op(\'cancelAward\',{id:\'' + wid + '\',reason:v(\'x_reason\'),basis:v(\'x_basis\')},function(){showMember(\'' + w.memberId + '\')})">취소 처리</button></div>');
 }
 
 // ---------- 출력 ----------
@@ -507,10 +563,12 @@ function xlsxLocal(sp) {
   XLSX.writeFile(wb, fileName('xlsx'));
 }
 function xlsxAwards() {
-  var rows = S.db.awards.filter(function (w) { return !w.canceled && (!S.af.year || w.year === S.af.year) && (!S.af.type || w.awardType === S.af.type); });
-  var ws = XLSX.utils.aoa_to_sheet([['연도', '수상일', '표창', '성명', '소속기관', '직위', '당시 소속 협의체', '공적·명칭', '비고']].concat(rows.map(function (w) { var m = member(w.memberId); return [w.year, w.date, w.awardType, m.name, m.agency, m.position, w.orgAtTime, w.title, w.memo]; })));
-  var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '유공표창'); XLSX.writeFile(wb, '위원 유공표창 이력' + (S.af.year ? '_' + S.af.year : '') + '.xlsx');
+  var rows = awardRows();
+  var ws = XLSX.utils.aoa_to_sheet([['연도', '수상일', '수여행사', '표창명', '훈격', '성명', '소속', '직위', '위원 여부', '당시 소속 협의체', '공적', '비고']].concat(rows.map(function (w) { var p = L_awardPerson(S.db, w); return [w.year, w.date, w.event, w.awardName, w.awardType, p.name, p.agency, p.position, p.isMember ? '위원' : '위원 아님', w.orgAtTime, w.title, w.memo]; })));
+  ws['!cols'] = [6, 11, 14, 16, 12, 8, 22, 10, 9, 16, 22, 10].map(function (w) { return { wch: w }; });
+  var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '유공표창'); XLSX.writeFile(wb, '유공표창 이력' + (S.af.year ? '_' + S.af.year : '') + (S.af.event ? '_' + S.af.event : '') + '.xlsx');
 }
+
 function xlsxHistory() {
   var ws = XLSX.utils.aoa_to_sheet([['변동일', '구분', '성명', '이전', '이후', '사유', '근거', '처리일시', '처리자']].concat(S.db.history.map(function (h) { return [h.date, h.type, member(h.memberId).name, h.before, h.after, h.reason, h.basis, h.at, h.user]; })));
   var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '변동이력'); XLSX.writeFile(wb, '위원 변동이력_' + S.today.replace(/-/g, '') + '.xlsx');

@@ -16,14 +16,16 @@ var TABLES = {
   appts: ['id', 'memberId', 'orgType', 'orgName', 'kind', 'role', 'termStart', 'termEnd', 'from', 'endDate', 'endReason', 'order', 'createdAt'],
   history: ['id', 'at', 'date', 'memberId', 'apptId', 'type', 'reason', 'basis', 'before', 'after', 'user'],
   orgs: ['id', 'orgType', 'name', 'order', 'active'],
-  awards: ['id', 'memberId', 'year', 'date', 'awardType', 'title', 'orgAtTime', 'memo', 'canceled', 'createdAt'],
+  awards: ['id', 'memberId', 'year', 'date', 'awardType', 'title', 'orgAtTime', 'memo', 'canceled', 'createdAt', 'awardName', 'event', 'personName', 'personAgency', 'personPosition'],
   awardTypes: ['id', 'name', 'order'],
   accounts: ['memberId', 'bank', 'number', 'holder', 'updatedAt']
 };
 /** 관리자만 보는 표: 결재권자와 공유하지 않는 별도 시트에 저장 */
 var SECRET_TABLES = ['accounts'];
 var TABLE_LABELS = { members: '위원', appts: '위촉', history: '변동이력', orgs: '조직', awards: '표창', awardTypes: '표창종류', accounts: '수당계좌' };
-var DEFAULT_AWARD_TYPES = ['보건복지부장관상', '대구광역시장상', '중구청장상'];
+var DEFAULT_AWARD_TYPES = ['보건복지부장관상', '대구광역시장상', '중구청장상']; // 훈격
+var AWARD_NAMES = ['지역복지유공표창']; // 표창명 기본값(직접 입력 가능)
+var AWARD_EVENTS = ['중구복지박람회', '성과보고회']; // 수여 행사 기본값(직접 입력 가능)
 var FIELD_LABELS = {
   name: '성명', agency: '소속기관', position: '직위', mobile: '휴대폰', office: '사무실', fax: '팩스',
   email: '이메일', address: '주소', memo: '메모', orgType: '협의체구분', orgName: '협의체/분과', kind: '위촉구분', role: '직책',
@@ -323,17 +325,30 @@ var L_OPS = {
   },
   /** 유공표창 등록 */
   addAward: function (db, ctx, x) {
-    var m = L_find(db.members, x.memberId); if (!m) L_fail('위원을 찾을 수 없습니다.');
-    var t = L_trim(x.awardType); if (!t) L_fail('표창 종류를 선택해 주세요.');
-    var d = L_normDate(x.date), y = L_trim(x.year) || (d ? d.slice(0, 4) : '');
-    if (!/^\d{4}$/.test(y)) L_fail('수상 연도를 입력해 주세요(예: 2026).');
-    var cur = db.appts.filter(function (a) { return a.memberId === m.id && L_activeOn(a, d || ctx.today); })
-      .map(function (a) { return a.orgName; }).join(', ');
-    var w = { id: L_nextId(db.awards, 'W'), memberId: m.id, year: y, date: d, awardType: t, title: L_trim(x.title),
-      orgAtTime: L_trim(x.orgAtTime) || cur, memo: L_trim(x.memo), canceled: '', createdAt: ctx.now };
-    db.awards.push(w);
-    L_log(db, ctx, { date: d || (y + '-01-01'), memberId: m.id, type: '표창등록', reason: x.reason, basis: x.basis, after: y + '년 ' + t + (w.title ? ' (' + w.title + ')' : '') });
-    return { msg: m.name + ' 위원 ' + y + '년 ' + t + ' 이력을 등록했습니다.', changed: ['awards', 'history'] };
+    var w = L_newAward(db, ctx, x);
+    var p = L_awardPerson(db, w);
+    L_log(db, ctx, { date: w.date || (w.year + '-01-01'), memberId: w.memberId, type: '표창등록', reason: x.reason, basis: x.basis, after: L_awardText(w) + (w.memberId ? '' : ' / ' + p.name + '(위원 아님)') });
+    return { msg: p.name + ' ' + w.year + '년 ' + (w.awardName || w.awardType) + ' 이력을 등록했습니다.', changed: ['awards', 'history'] };
+  },
+  /** 표창 일괄 등록: 위원 명단에 있는 사람(성명 일치, 동명이인이면 소속까지)은 위원과 연결, 없으면 비위원으로 기록 */
+  bulkAwards: function (db, ctx, x) {
+    var rows = x.rows || [], added = 0, linked = 0, errors = [];
+    rows.forEach(function (r, i) {
+      try {
+        var nm = L_trim(r.personName).replace(/\s/g, '');
+        if (!nm) L_fail('성명이 비어 있습니다.');
+        var cand = db.members.filter(function (m) { return String(m.name).replace(/\s/g, '') === nm; });
+        if (cand.length > 1 && r.personAgency) cand = cand.filter(function (m) { return String(m.agency).indexOf(L_trim(r.personAgency)) >= 0 || L_trim(r.personAgency).indexOf(m.agency) >= 0; });
+        var y = {}; for (var k in r) y[k] = r[k];
+        y.memberId = cand.length === 1 ? cand[0].id : '';
+        if (y.memberId) linked++;
+        var w = L_newAward(db, ctx, y);
+        L_log(db, ctx, { date: w.date || (w.year + '-01-01'), memberId: w.memberId, type: '표창등록', reason: x.reason || '표창 명단 일괄 등록', basis: x.basis || '', after: L_awardText(w) + (w.memberId ? '' : ' / ' + w.personName + '(위원 아님)') });
+        added++;
+      } catch (e) { errors.push((i + 1) + '번째 줄: ' + e.message); }
+    });
+    if (!added) L_fail('등록된 표창이 없습니다.\n' + errors.join('\n'));
+    return { msg: added + '건 등록했습니다 (위원과 연결 ' + linked + '건, 위원 아닌 수상자 ' + (added - linked) + '건)' + (errors.length ? '.\n등록하지 못한 줄:\n' + errors.join('\n') : '.'), changed: ['awards', 'history'] };
   },
   /** 회의수당 입금 계좌 등록·변경. 이력에는 계좌번호를 남기지 않음(결재권자도 이력을 보므로) */
   setAccount: function (db, ctx, x) {
@@ -348,7 +363,7 @@ var L_OPS = {
     var w = L_find(db.awards, x.id); if (!w) L_fail('표창 기록을 찾을 수 없습니다.');
     if (w.canceled) L_fail('이미 취소된 기록입니다.');
     w.canceled = ctx.today;
-    L_log(db, ctx, { date: ctx.today, memberId: w.memberId, type: '표창취소', reason: x.reason, basis: x.basis, before: w.year + '년 ' + w.awardType, after: '취소' });
+    L_log(db, ctx, { date: ctx.today, memberId: w.memberId, type: '표창취소', reason: x.reason, basis: x.basis, before: L_awardText(w) + (w.memberId ? '' : ' / ' + w.personName), after: '취소' });
     return { msg: '표창 기록을 취소 처리했습니다.', changed: ['awards', 'history'] };
   },
   /** 표창 종류 추가 */
@@ -375,6 +390,30 @@ var L_OPS = {
     return { msg: o.name + (o.active === 'Y' ? ' 사용' : ' 숨김') + ' 처리했습니다.', changed: ['orgs'] };
   }
 };
+function L_newAward(db, ctx, x) {
+  var m = x.memberId ? L_find(db.members, x.memberId) : null;
+  if (x.memberId && !m) L_fail('위원을 찾을 수 없습니다.');
+  if (!m && !L_trim(x.personName)) L_fail('수상자 성명을 입력해 주세요.');
+  var t = L_trim(x.awardType); if (!t) L_fail('훈격(예: 중구청장상)을 입력해 주세요.');
+  var d = L_normDate(x.date), y = L_trim(x.year).replace(/\D/g, '') || (d ? d.slice(0, 4) : '');
+  if (!/^\d{4}$/.test(y)) L_fail('수상 연도를 입력해 주세요(예: 2026).');
+  if (!db.awardTypes.some(function (a) { return a.name === t; })) db.awardTypes.push({ id: L_nextId(db.awardTypes, 'T'), name: t, order: String(db.awardTypes.length + 1) });
+  var cur = m ? db.appts.filter(function (a) { return a.memberId === m.id && L_activeOn(a, d || (y + '-12-31')); }).map(function (a) { return a.orgName; }).join(', ') : '';
+  var w = { id: L_nextId(db.awards, 'W'), memberId: m ? m.id : '', year: y, date: d, awardType: t, title: L_trim(x.title),
+    orgAtTime: L_trim(x.orgAtTime) || cur, memo: L_trim(x.memo), canceled: '', createdAt: ctx.now,
+    awardName: L_trim(x.awardName), event: L_trim(x.event),
+    personName: m ? '' : L_trim(x.personName).replace(/\s+/g, ''), personAgency: m ? '' : L_trim(x.personAgency), personPosition: m ? '' : L_trim(x.personPosition) };
+  db.awards.push(w);
+  return w;
+}
+/** 수상자 정보: 위원이면 위원 정보, 아니면 표창에 적힌 정보 */
+function L_awardPerson(db, w) {
+  var m = w.memberId ? L_find(db.members, w.memberId) : null;
+  return m ? { name: m.name, agency: m.agency, position: m.position, isMember: true } : { name: w.personName || '', agency: w.personAgency || '', position: w.personPosition || '', isMember: false };
+}
+function L_awardText(w) {
+  return w.year + '년 ' + [w.event, w.awardName, w.awardType].filter(function (x) { return x; }).join(' ') + (w.title ? ' (' + w.title + ')' : '');
+}
 function L_setAccount(db, ctx, mid, x) {
   var bank = L_trim(x.bank), num = L_trim(x.number).replace(/\s/g, ''), holder = L_trim(x.holder);
   if (!bank || !num) L_fail('은행과 계좌번호를 입력해 주세요.');
@@ -443,6 +482,9 @@ function L_sampleDb(today) {
   ctx.now = '2026-09-10 10:00:00';
   [[1, '2024', '중구청장상'], [5, '2025', '대구광역시장상'], [1, '2026', '보건복지부장관상'], [9, '2026', '중구청장상']].forEach(function (w) {
     L_OPS.addAward(db, ctx, { memberId: db.members[w[0]].id, year: w[1], date: w[1] + '-09-07', awardType: w[2], title: '사회복지의 날 유공' });
+  });
+  [['2025', '중구복지박람회', '가상수상자'], ['2025', '성과보고회', '예시수상자'], ['2026', '중구복지박람회', '샘플수상자']].forEach(function (w) {
+    L_OPS.addAward(db, ctx, { personName: w[2], personAgency: '가상복지기관', year: w[0], event: w[1], awardName: '지역복지유공표창', awardType: '중구청장상', title: '지역복지 증진 유공' });
   });
   return db;
 }
