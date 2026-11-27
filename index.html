@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>위원 명단 관리</title>
+<meta name="robots" content="noindex,nofollow">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root { --main:#1f5aa6; --main-l:#e8f0fb; --line:#d5dbe3; --bg:#f4f6f9; --text:#1d2733; --sub:#5c6b7d; --red:#c0392b; --orange:#d9822b; --green:#2e8b57; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:'Malgun Gothic','맑은 고딕','Apple SD Gothic Neo',sans-serif; background:var(--bg); color:var(--text); font-size:15px; }
+  header { background:var(--main); color:#fff; padding:12px 20px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; flex:1; min-width:220px; }
+  header .who { font-size:13px; opacity:.9; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:12px; background:#fff3; }
+  nav { background:#fff; border-bottom:1px solid var(--line); display:flex; overflow-x:auto; padding:0 12px; }
+  nav button { background:none; border:none; padding:13px 16px; font-size:15px; cursor:pointer; color:var(--sub); border-bottom:3px solid transparent; white-space:nowrap; font-family:inherit; }
+  nav button.on { color:var(--main); border-color:var(--main); font-weight:bold; }
+  main { padding:18px 20px 60px; max-width:1280px; margin:0 auto; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:8px; padding:16px 18px; margin-bottom:16px; }
+  .card h2 { font-size:16px; margin:0 0 12px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:12px; }
+  .stat { background:var(--main-l); border-radius:8px; padding:14px; cursor:pointer; }
+  .stat b { display:block; font-size:26px; color:var(--main); margin-top:4px; }
+  .stat span { color:var(--sub); font-size:13px; }
+  .bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+  .bar .sp { flex:1; }
+  label.f { display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--sub); }
+  select, input, textarea { font-family:inherit; font-size:15px; padding:7px 9px; border:1px solid #b9c3cf; border-radius:6px; background:#fff; color:var(--text); }
+  textarea { min-height:60px; }
+  button.b { font-family:inherit; font-size:14px; padding:8px 14px; border-radius:6px; border:1px solid #b9c3cf; background:#fff; cursor:pointer; color:var(--text); }
+  button.b:hover { background:#f0f3f7; }
+  button.p { background:var(--main); color:#fff; border-color:var(--main); }
+  button.p:hover { background:#174a8b; }
+  button.d { color:var(--red); border-color:#e3b3ad; }
+  button.s { padding:4px 9px; font-size:13px; }
+  table.t { width:100%; border-collapse:collapse; background:#fff; }
+  table.t th, table.t td { border-bottom:1px solid var(--line); padding:8px 8px; text-align:left; vertical-align:top; font-size:14px; }
+  table.t th { background:#f0f3f7; font-weight:bold; color:#3a4757; position:sticky; top:0; }
+  table.t tr.click { cursor:pointer; } table.t tr.click:hover td { background:#f6f9fd; }
+  .muted { color:var(--sub); font-size:13px; }
+  .pre { white-space:pre-line; }
+  .tag { display:inline-block; padding:1px 7px; border-radius:4px; font-size:12px; border:1px solid; white-space:nowrap; }
+  .st-재직 { color:var(--green); border-color:#a9d5bb; background:#eef8f2; }
+  .st-해촉, .st-사임 { color:var(--red); border-color:#e8b9b3; background:#fdf0ee; }
+  .st-임기만료 { color:var(--orange); border-color:#efcfa9; background:#fdf6ed; }
+  .st-기타 { color:var(--sub); border-color:var(--line); background:#f5f6f8; }
+  .warn { color:var(--orange); font-weight:bold; }
+  .orghead { margin:18px 0 6px; font-size:15px; font-weight:bold; color:var(--main); }
+  .scroll { overflow-x:auto; }
+  .scroll table.t { min-width:760px; }
+  #modal { position:fixed; inset:0; background:#0007; display:none; align-items:flex-start; justify-content:center; padding:30px 12px; overflow:auto; z-index:20; }
+  #modal .box { background:#fff; border-radius:10px; width:100%; max-width:860px; padding:20px 22px; }
+  #modal .box h3 { margin:0 0 14px; font-size:18px; }
+  .form { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; margin-bottom:14px; }
+  .form .w2 { grid-column:span 2; }
+  .actions { display:flex; gap:8px; justify-content:flex-end; margin-top:10px; flex-wrap:wrap; }
+  #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#24303e; color:#fff; padding:11px 18px; border-radius:8px; display:none; z-index:40; max-width:90%; white-space:pre-line; }
+  #loading { position:fixed; inset:0; background:#fff9; display:none; align-items:center; justify-content:center; z-index:50; font-size:16px; }
+  .readonly-note { background:#fff8e6; border:1px solid #f0d9a0; padding:9px 14px; border-radius:6px; margin-bottom:14px; font-size:14px; }
+  /* 출력(한글 양식형) */
+  #print { display:none; position:fixed; inset:0; background:#888; overflow:auto; z-index:30; padding:20px 0; }
+  #print .tools { position:sticky; top:0; text-align:center; margin-bottom:14px; }
+  .page { background:#fff; width:210mm; min-height:297mm; margin:0 auto 16px; padding:18mm 16mm; box-shadow:0 2px 8px #0004; font-family:'바탕','Batang','Malgun Gothic',serif; }
+  .page.land { width:297mm; min-height:210mm; page:land; }
+  .page.land th, .page.land td { font-size:10pt; }
+  .page h1 { text-align:center; font-size:20pt; margin:0 0 4mm; letter-spacing:1px; }
+  .page h2 { text-align:center; font-size:16pt; margin:0 0 3mm; }
+  .page .base { text-align:right; font-size:10pt; margin-bottom:2mm; }
+  .page table { width:100%; border-collapse:collapse; border:2px solid #000; }
+  .page th, .page td { border:1px solid #000; text-align:center; vertical-align:middle; font-size:11pt; padding:2.2mm 1.5mm; white-space:pre-line; font-family:'Malgun Gothic','맑은 고딕',sans-serif; }
+  .page th { background:#d9d9d9; font-weight:bold; }
+  @media print {
+    body > *:not(#print) { display:none !important; }
+    #print { display:block !important; position:static; background:#fff; padding:0; }
+    #print .tools { display:none; }
+    .page { box-shadow:none; margin:0; width:auto; min-height:0; padding:0; page-break-after:always; }
+    @page { size:A4; margin:16mm 14mm; }
+    @page land { size:A4 landscape; margin:14mm 12mm; }
+  }
+  @media (max-width:640px) { main { padding:12px 10px 60px; } .form .w2 { grid-column:auto; } header h1 { font-size:16px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>중구지역사회보장협의체 위원 명단 관리</h1>
+  <div class="who"><span id="who"></span> <span class="badge" id="role"></span> <a href="#" style="color:#fff;margin-left:8px" onclick="formPassword();return false">비밀번호</a> <a href="#" style="color:#fff;margin-left:6px" onclick="logout();return false">로그아웃</a></div>
+</header>
+<nav id="nav"></nav>
+<main id="main"><div class="card">불러오는 중입니다...</div></main>
+<div id="modal"><div class="box" id="mbox"></div></div>
+<div id="print"><div class="tools"><button class="b p" onclick="window.print()">인쇄 / PDF로 저장</button> <button class="b" onclick="closePrint()">닫기</button></div><div id="pages"></div></div>
+<div id="toast"></div>
+<div id="loading">처리 중입니다...</div>
+
+<script src="logic.js"></script>
+<script src="config.js"></script>
+
+<script>
+var S = { db:null, today:'', user:'', canEdit:false, view:'home',
+  f:{ orgType:'실무분과', orgName:'', date:'', q:'', hideContact:false },
+  hf:{ type:'', year:'' }, af:{ year:'', type:'' }, mq:'', importRows:null, expireDays:60 };
+try { var d0 = parseInt(localStorage.getItem('expireDays'),10); if (d0) S.expireDays = d0; } catch(e) {}
+var COUNCIL = '중구지역사회보장협의체';
+var VIEWS = [['home','처음 화면'],['roster','명단 조회'],['members','위원 찾기'],['awards','유공표창'],['history','변동이력'],['import','일괄 등록'],['settings','설정']];
+
+// ---------- 서버 호출 ----------
+function backend(fn, args) {
+  var body = { fn: fn, args: args, token: S.token };
+  if (window.MOCK_BACKEND) return new Promise(function (res) { setTimeout(function () { res(window.MOCK_BACKEND(body)); }, 80); });
+  if (!window.API_URL || API_URL.indexOf('script.google.com') < 0) return Promise.resolve({ ok: false, error: 'config.js에 API 주소(API_URL)가 아직 없습니다.' });
+  return fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
+    .then(function (r) { return r.json(); });
+}
+function call(fn, args, ok, quiet) {
+  if (!quiet) load(true);
+  backend(fn, args).then(function (res) {
+    load(false);
+    if (res.ok) return ok(res.result);
+    if (res.auth) { logoutLocal(); return showLogin(res.error); }
+    alertMsg(res.error);
+  }).catch(function (e) { load(false); alertMsg('서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요.\n(' + e.message + ')'); });
+}
+function op(name, args, done) {
+  call('api', [name, args], function (res) {
+    var o = JSON.parse(res); S.db = o.db; toast(o.msg); closeModal(); render(); if (done) done();
+  });
+}
+function load(on) { document.getElementById('loading').style.display = on ? 'flex' : 'none'; }
+function toast(m) { var t = document.getElementById('toast'); t.textContent = m; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(function(){ t.style.display='none'; }, 4000); }
+function alertMsg(m) { openModal('<h3>알림</h3><div class="pre">' + esc(m) + '</div><div class="actions"><button class="b p" onclick="closeModal()">확인</button></div>'); }
+function esc(s) { return String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function v(id) { var e = document.getElementById(id); return e ? e.value.trim() : ''; }
+function opts(list, sel, blank) { return (blank !== undefined ? '<option value="">' + blank + '</option>' : '') + list.map(function (x) { var val = Array.isArray(x) ? x[0] : x, lab = Array.isArray(x) ? x[1] : x; return '<option value="' + esc(val) + '"' + (String(val) === String(sel) ? ' selected' : '') + '>' + esc(lab) + '</option>'; }).join(''); }
+function orgNames(t, all) { return S.db.orgs.filter(function (o) { return o.orgType === t && (all || o.active !== 'N'); }).sort(function (a,b){ return (+a.order)-(+b.order); }).map(function (o) { return o.name; }); }
+function stTag(s) { var c = ['재직','해촉','사임','임기만료'].indexOf(s) >= 0 ? s : '기타'; return '<span class="tag st-' + c + '">' + esc(s) + '</span>'; }
+function fmt(d) { return d ? d.replace(/-/g, '.') : ''; }
+function member(id) { return L_find(S.db.members, id) || {}; }
+function curAppts(mid, date) { return S.db.appts.filter(function (a) { return a.memberId === mid && L_activeOn(a, date || S.today); }); }
+function needEdit() { if (!S.canEdit) { alertMsg('조회 전용 권한입니다. 변경은 관리자만 할 수 있습니다.'); return false; } return true; }
+function openModal(h) { document.getElementById('mbox').innerHTML = h; document.getElementById('modal').style.display = 'flex'; window.scrollTo(0,0); }
+function closeModal() { document.getElementById('modal').style.display = 'none'; }
+
+// ---------- 로그인 ----------
+function loadData() {
+  call('getData', [], function (res) { var o = JSON.parse(res); S.db = o.db; S.today = o.today; S.user = o.user; S.canEdit = o.canEdit; if (!S.f.date) S.f.date = o.today; render(); if (S.mustChange) formPassword(true); });
+}
+function logoutLocal() { S.token = ''; S.db = null; try { sessionStorage.removeItem('rosterToken'); } catch (e) {} }
+function logout() { var t = S.token; call('logout', [], function () {}, true); logoutLocal(); showLogin('로그아웃했습니다.'); }
+function showLogin(msg) {
+  document.getElementById('nav').innerHTML = ''; document.getElementById('who').textContent = ''; document.getElementById('role').textContent = '';
+  document.getElementById('main').innerHTML = '<div class="card" style="max-width:380px;margin:40px auto"><h2>로그인</h2>' + (msg ? '<div class="readonly-note">' + esc(msg) + '</div>' : '') +
+    '<form onsubmit="doLogin();return false"><div class="form" style="grid-template-columns:1fr"><label class="f">아이디<input id="lg_id" autocomplete="username"></label><label class="f">비밀번호<input id="lg_pw" type="password" autocomplete="current-password"></label></div>' +
+    '<button class="b p" style="width:100%">로그인</button></form><div class="muted" style="margin-top:12px">계정은 관리자가 만들어 드립니다. 5번 틀리면 10분간 잠깁니다.</div></div>';
+  var e = document.getElementById('lg_id'); if (e) e.focus();
+}
+function doLogin() {
+  call('login', [v('lg_id'), document.getElementById('lg_pw').value], function (res) {
+    var o = JSON.parse(res); S.token = o.token; S.mustChange = o.mustChange;
+    try { sessionStorage.setItem('rosterToken', o.token); } catch (e) {}
+    loadData();
+  });
+}
+function formPassword(must) {
+  openModal('<h3>비밀번호 바꾸기</h3>' + (must ? '<div class="readonly-note">처음 받은 임시 비밀번호입니다. 새 비밀번호로 바꿔 주세요.</div>' : '') +
+    '<div class="form"><label class="f">현재 비밀번호<input type="password" id="pw0"></label><label class="f">새 비밀번호 (8자 이상)<input type="password" id="pw1"></label><label class="f">새 비밀번호 확인<input type="password" id="pw2"></label></div>' +
+    '<div class="actions"><button class="b" onclick="closeModal()">나중에</button><button class="b p" onclick="savePassword()">바꾸기</button></div>');
+}
+function savePassword() {
+  var a = document.getElementById('pw1').value;
+  if (a !== document.getElementById('pw2').value) return toast('새 비밀번호가 서로 다릅니다.');
+  call('changePassword', [document.getElementById('pw0').value, a], function (m) { S.mustChange = false; closeModal(); toast(m); });
+}
+function loadUsers() {
+  call('listUsers', [], function (res) {
+    var list = JSON.parse(res), el = document.getElementById('users'); if (!el) return;
+    el.innerHTML = '<table class="t"><tr><th>아이디</th><th>이름</th><th>권한</th><th></th></tr>' + list.map(function (u) {
+      return '<tr><td>' + esc(u.id) + '</td><td>' + esc(u.name) + '</td><td>' + (u.role === 'admin' ? '관리자' : '조회 전용') + '</td><td><button class="b s" onclick="formUser(\'' + esc(u.id) + '\',\'' + esc(u.name) + '\',\'' + u.role + '\')">비밀번호 재설정</button> ' + (u.role === 'admin' ? '' : '<button class="b s d" onclick="if(confirm(\'' + esc(u.id) + ' 계정을 지울까요?\'))call(\'deleteUser\',[\'' + esc(u.id) + '\'],function(m){toast(m);loadUsers()})">삭제</button>') + '</td></tr>';
+    }).join('') + '</table>';
+  }, true);
+}
+function formUser(id, name, role) {
+  openModal('<h3>' + (id ? '비밀번호 재설정' : '조회 계정 만들기 (결재권자용)') + '</h3><div class="form"><label class="f">아이디 (영문·숫자)<input id="u_id" value="' + esc(id || '') + '"' + (id ? ' readonly' : '') + '></label><label class="f">이름<input id="u_name" value="' + esc(name || '') + '" placeholder="예: 복지정책과장"></label>' +
+    '<label class="f">권한<select id="u_role">' + opts([['viewer', '조회 전용'], ['admin', '관리자']], role || 'viewer') + '</select></label><label class="f">' + (id ? '새 ' : '') + '임시 비밀번호 (8자 이상)<input id="u_pw"></label></div>' +
+    '<div class="muted">임시 비밀번호를 직접 전달해 주세요. 처음 로그인하면 바꾸라는 안내가 나옵니다.</div><div class="actions"><button class="b" onclick="closeModal()">취소</button><button class="b p" onclick="call(\'saveUser\',[{id:v(\'u_id\'),name:v(\'u_name\'),role:v(\'u_role\'),password:v(\'u_pw\')}],function(m){toast(m);closeModal();loadUsers()})">저장</button></div>');
+}
+
+// ---------- 화면 ----------
+function render() {
+  document.getElementById('who').textContent = S.user || '';
+  document.getElementById('role').textContent = S.canEdit ? '관리자' : '조회 전용';
+  document.getElementById('nav').innerHTML = VIEWS.filter(function (x) { return S.canEdit || x[0] !== 'import'; })
+    .map(function (x) { return '<button class="' + (S.view === x[0] ? 'on' : '') + '" onclick="go(\'' + x[0] + '\')">' + x[1] + '</button>'; }).join('');
+  var h = S.canEdit ? '' : '<div class="readonly-note">조회 전용으로 열려 있습니다. 명단 조회와 출력만 할 수 있습니다.</div>';
+  h += ({ home:vHome, roster:vRoster, members:vMembers, awards:vAwards, history:vHistory, import:vImport, settings:vSettings }[S.view])();
+  document.getElementById('main').innerHTML = h;
+}
+function go(view, patch) { S.view = view; if (patch) for (var k in patch) S.f[k] = patch[k]; render(); window.scrollTo(0,0); }
+
+function vHome() {
+  var h = '<div class="card"><h2>오늘(' + fmt(S.today) + ') 기준 재직 위원</h2><div class="grid">';
+  ORG_TYPES.forEach(function (t) {
+    var n = S.db.appts.filter(function (a) { return a.orgType === t && L_activeOn(a, S.today); }).length;
+    var orgs = orgNames(t).length;
+    h += '<div class="stat" onclick="go(\'roster\',{orgType:\'' + t + '\',orgName:\'\'})"><span>' + t + (orgs > 1 ? ' (' + orgs + '곳)' : '') + '</span><b>' + n + '명</b></div>';
+  });
+  h += '</div></div>';
+  var ex = L_expiring(S.db, S.today, S.expireDays);
+  h += '<div class="card"><h2>임기만료 예정 (' + S.expireDays + '일 이내) <span class="' + (ex.length ? 'warn' : 'muted') + '">' + ex.length + '명</span></h2>';
+  if (!ex.length) h += '<div class="muted">해당 위원이 없습니다.</div>';
+  else h += '<div class="scroll"><table class="t"><tr><th>임기종료</th><th>남은 기간</th><th>성명</th><th>소속기관</th><th>협의체/분과</th><th>직책</th></tr>' + ex.map(function (r) {
+    var left = Math.round((Date.parse(r.appt.termEnd) - Date.parse(S.today)) / 864e5);
+    return '<tr class="click" onclick="showMember(\'' + r.member.id + '\')"><td>' + fmt(r.appt.termEnd) + '</td><td class="warn">' + left + '일</td><td>' + esc(r.member.name) + '</td><td>' + esc(r.member.agency) + '</td><td>' + esc(r.appt.orgName) + '</td><td>' + esc(r.appt.role) + '</td></tr>';
+  }).join('') + '</table></div>';
+  h += '</div>';
+  var rec = S.db.history.slice().sort(function (a,b){ return a.at < b.at ? 1 : -1; }).slice(0, 8);
+  h += '<div class="card"><h2>최근 변동사항</h2>' + histTable(rec) + '<div class="actions"><button class="b" onclick="go(\'history\')">전체 보기</button></div></div>';
+  return h;
+}
+
+function vRoster() {
+  var f = S.f; if (!f.date) f.date = S.today;
+  var names = orgNames(f.orgType);
+  if (f.orgName && names.indexOf(f.orgName) < 0) f.orgName = '';
+  var h = '<div class="card"><div class="bar">' +
+    '<label class="f">협의체 구분<select onchange="S.f.orgType=this.value;S.f.orgName=\'\';render()">' + opts(ORG_TYPES, f.orgType) + '</select></label>' +
+    '<label class="f">' + (f.orgType === '동협의체' ? '동' : '분과/위원회') + '<select onchange="S.f.orgName=this.value;render()">' + opts(names, f.orgName, names.length > 1 ? '전체' : undefined) + '</select></label>' +
+    '<label class="f">기준일자<input type="date" value="' + f.date + '" onchange="S.f.date=this.value||S.today;render()"></label>' +
+    '<label class="f">검색<input placeholder="성명, 소속" value="' + esc(f.q) + '" oninput="S.f.q=this.value;renderRosterTable()"></label>' +
+    '<span class="sp"></span>' +
+    (S.canEdit ? '<button class="b p" onclick="formAppoint()">+ 위원 위촉</button>' : '') + '</div>' +
+    '<div class="bar"><label><input type="checkbox" ' + (f.hideContact ? 'checked' : '') + ' onchange="S.f.hideContact=this.checked"> 출력할 때 연락처 빼기</label><span class="sp"></span>' +
+    '<button class="b" onclick="printView()">한글 양식으로 보기·인쇄</button><button class="b" onclick="download(\'xlsx\')">엑셀 내려받기</button><button class="b" onclick="download(\'pdf\')">PDF 내려받기</button>' + (S.canEdit ? '<button class="b" onclick="xlsxAccounts()">회의수당 계좌 목록</button>' : '') + '</div>' +
+    '<div id="rt"></div></div>';
+  setTimeout(renderRosterTable, 0);
+  return h;
+}
+function renderRosterTable() {
+  var f = S.f, el = document.getElementById('rt'); if (!el) return;
+  var list = f.orgName ? [f.orgName] : orgNames(f.orgType), q = f.q.trim(), h = '', total = 0;
+  list.forEach(function (n) {
+    var rows = L_roster(S.db, f.orgType, n, f.date).filter(function (r) { return !q || (r.member.name + r.member.agency + r.member.position).indexOf(q) >= 0; });
+    total += rows.length;
+    if (list.length > 1) { if (!rows.length) return; h += '<div class="orghead">' + esc(n) + ' <span class="muted">' + rows.length + '명</span></div>'; }
+    h += '<div class="scroll"><table class="t"><tr><th>연번</th><th>소속</th><th>직위</th><th>성명</th><th>연락처</th><th>직책</th><th>위촉구분</th><th>임기</th><th>상태</th></tr>' +
+      (rows.length ? rows.map(function (r, i) { var m = r.member, a = r.appt, st = L_status(a, f.date);
+        var soon = a.termEnd && a.termEnd >= f.date && a.termEnd <= L_addDays(f.date, S.expireDays);
+        return '<tr class="click" onclick="showMember(\'' + m.id + '\')"><td>' + (i + 1) + '</td><td>' + esc(m.agency) + '</td><td>' + esc(m.position) + '</td><td><b>' + esc(m.name) + '</b></td><td class="pre">' + esc([m.mobile, m.office, m.fax ? 'F.' + m.fax : ''].filter(Boolean).join('\n')) + '</td><td>' + esc(a.role) + '</td><td>' + esc(a.kind) + '</td><td>' + (a.termStart || a.termEnd ? fmt(a.termStart) + ' ~<br>' + '<span class="' + (soon ? 'warn' : '') + '">' + fmt(a.termEnd) + '</span>' : '<span class="muted">임기 없음<br>' + fmt(a.from) + '~</span>') + '</td><td>' + stTag(st) + '</td></tr>'; }).join('')
+      : '<tr><td colspan="9" class="muted">' + fmt(f.date) + ' 기준 재직 위원이 없습니다.</td></tr>') + '</table></div>';
+  });
+  el.innerHTML = '<div class="muted" style="margin-bottom:6px">' + fmt(f.date) + ' 기준 ' + total + '명</div>' + h;
+}
+
+function vMembers() {
+  var q = S.mq.trim();
+  var list = S.db.members.filter(function (m) { return !q || (m.name + m.agency + m.position + m.mobile).indexOf(q) >= 0; })
+    .sort(function (a, b) { return a.name.localeCompare(b.name, 'ko'); });
+  var h = '<div class="card"><div class="bar"><label class="f">성명·소속·연락처로 찾기<input id="mq" value="' + esc(S.mq) + '" oninput="S.mq=this.value;clearTimeout(window._mq);window._mq=setTimeout(function(){render();var e=document.getElementById(\'mq\');e.focus();e.setSelectionRange(e.value.length,e.value.length);},250)"></label><span class="sp"></span><span class="muted">전체 ' + S.db.members.length + '명 중 ' + list.length + '명</span></div>';
+  h += '<div class="scroll"><table class="t"><tr><th>성명</th><th>소속기관</th><th>직위</th><th>휴대폰</th><th>현재 소속 협의체</th><th>표창</th></tr>' + list.slice(0, 300).map(function (m) {
+    var cur = curAppts(m.id).map(function (a) { return a.orgName + (a.role !== '위원' ? '(' + a.role + ')' : ''); }).join(', ');
+    var aw = S.db.awards.filter(function (w) { return w.memberId === m.id && !w.canceled; }).length;
+    return '<tr class="click" onclick="showMember(\'' + m.id + '\')"><td><b>' + esc(m.name) + '</b></td><td>' + esc(m.agency) + '</td><td>' + esc(m.position) + '</td><td>' + esc(m.mobile) + '</td><td>' + (cur ? esc(cur) : '<span class="muted">없음</span>') + '</td><td>' + (aw ? aw + '건' : '') + '</td></tr>';
+  }).join('') + '</table></div></div>';
+  return h;
+}
+
+function histTable(rows) {
+  if (!rows.length) return '<div class="muted">기록이 없습니다.</div>';
+  return '<div class="scroll"><table class="t"><tr><th>변동일</th><th>구분</th><th>성명</th><th>내용</th><th>사유</th><th>근거</th><th>처리</th></tr>' + rows.map(function (h) {
+    var m = member(h.memberId);
+    var c = (h.before ? '<span class="muted">이전:</span> ' + esc(h.before) + '\n' : '') + (h.after ? (h.before ? '<span class="muted">이후:</span> ' : '') + esc(h.after) : '');
+    return '<tr><td>' + fmt(h.date) + '</td><td><b>' + esc(h.type) + '</b></td><td><a href="#" onclick="showMember(\'' + h.memberId + '\');return false">' + esc(m.name) + '</a></td><td class="pre">' + c + '</td><td>' + esc(h.reason) + '</td><td>' + esc(h.basis) + '</td><td class="muted">' + esc(h.at.slice(0, 16)) + '<br>' + esc(h.user) + '</td></tr>';
+  }).join('') + '</table></div>';
+}
+function vHistory() {
+  var years = {}; S.db.history.forEach(function (h) { if (h.date) years[h.date.slice(0, 4)] = 1; });
+  var rows = S.db.history.filter(function (h) { return (!S.hf.type || h.type === S.hf.type) && (!S.hf.year || h.date.slice(0, 4) === S.hf.year); })
+    .sort(function (a, b) { return a.date === b.date ? (a.at < b.at ? 1 : -1) : (a.date < b.date ? 1 : -1); });
+  return '<div class="card"><div class="bar"><label class="f">구분<select onchange="S.hf.type=this.value;render()">' + opts(CHANGE_TYPES, S.hf.type, '전체') + '</select></label>' +
+    '<label class="f">연도<select onchange="S.hf.year=this.value;render()">' + opts(Object.keys(years).sort().reverse(), S.hf.year, '전체') + '</select></label><span class="sp"></span><span class="muted">' + rows.length + '건 · 기록은 지워지지 않습니다</span>' +
+    '<button class="b" onclick="xlsxHistory()">엑셀 내려받기</button></div>' + histTable(rows) + '</div>';
+}
+
+function vAwards() {
+  var aw = S.db.awards.filter(function (w) { return !w.canceled; });
+  var years = {}; aw.forEach(function (w) { years[w.year] = 1; });
+  var ys = Object.keys(years).sort().reverse(), types = S.db.awardTypes.map(function (t) { return t.name; });
+  aw.forEach(function (w) { if (types.indexOf(w.awardType) < 0) types.push(w.awardType); });
+  var h = '<div class="card"><h2>연도별 표창 현황</h2><div class="scroll"><table class="t"><tr><th>연도</th>' + types.map(function (t) { return '<th>' + esc(t) + '</th>'; }).join('') + '<th>합계</th></tr>';
+  h += ys.map(function (y) { var sum = 0; return '<tr class="click" onclick="S.af.year=\'' + y + '\';render()"><td><b>' + y + '년</b></td>' + types.map(function (t) { var n = aw.filter(function (w) { return w.year === y && w.awardType === t; }).length; sum += n; return '<td>' + (n || '') + '</td>'; }).join('') + '<td><b>' + sum + '</b></td></tr>'; }).join('') || '<tr><td colspan="' + (types.length + 2) + '" class="muted">등록된 표창이 없습니다.</td></tr>';
+  h += '</table></div></div>';
+  var rows = aw.filter(function (w) { return (!S.af.year || w.year === S.af.year) && (!S.af.type || w.awardType === S.af.type); })
+    .sort(function (a, b) { return a.year === b.year ? (a.date < b.date ? 1 : -1) : (a.year < b.year ? 1 : -1); });
+  h += '<div class="card"><div class="bar"><label class="f">연도<select onchange="S.af.year=this.value;render()">' + opts(ys, S.af.year, '전체') + '</select></label>' +
+    '<label class="f">표창 종류<select onchange="S.af.type=this.value;render()">' + opts(types, S.af.type, '전체') + '</select></label><span class="sp"></span>' +
+    (S.canEdit ? '<button class="b p" onclick="formAward()">+ 표창 등록</button>' : '') + '<button class="b" onclick="xlsxAwards()">엑셀 내려받기</button></div>';
+  h += '<div class="scroll"><table class="t"><tr><th>연도</th><th>수상일</th><th>표창</th><th>성명</th><th>소속기관</th><th>당시 소속 협의체</th><th>공적·명칭</th><th>비고</th></tr>' + (rows.map(function (w) { var m = member(w.memberId);
+    return '<tr class="click" onclick="showMember(\'' + w.memberId + '\')"><td>' + w.year + '</td><td>' + fmt(w.date) + '</td><td><b>' + esc(w.awardType) + '</b></td><td>' + esc(m.name) + '</td><td>' + esc(m.agency) + '</td><td>' + esc(w.orgAtTime) + '</td><td>' + esc(w.title) + '</td><td>' + esc(w.memo) + '</td></tr>'; }).join('') || '<tr><td colspan="8" class="muted">해당 기록이 없습니다.</td></tr>') + '</table></div></div>';
+  return h;
+}
+
+function vImport() {
+  var h = '<div class="card"><h2>기존 명단 일괄 등록</h2><ol class="muted" style="line-height:1.8;margin-top:0">' +
+    '<li>아래 [등록 양식 내려받기]로 엑셀 양식을 받습니다.</li><li>한글 명단의 표를 복사해 양식에 붙여 넣고, 협의체 구분·분과명·임기를 채웁니다.</li>' +
+    '<li>[엑셀 파일 선택]으로 올리면 미리보기가 나옵니다. 확인 후 [등록]을 누릅니다.</li></ol>' +
+    '<div class="bar"><button class="b" onclick="xlsxTemplate()">등록 양식 내려받기</button><label class="b" style="display:inline-block">엑셀 파일 선택<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="readImport(this.files[0])"></label></div></div>';
+  if (S.importRows) {
+    var r = S.importRows;
+    h += '<div class="card"><h2>미리보기 (' + r.length + '줄)</h2><div class="form"><label class="f w2">등록 사유<input id="ir" value="기존 명단 일괄 등록"></label><label class="f w2">근거<input id="ib" placeholder="예: 2026년 위원 명단(한글 파일)"></label></div>' +
+      '<div class="scroll"><table class="t"><tr><th>#</th><th>협의체 구분</th><th>분과/동</th><th>성명</th><th>소속</th><th>직위</th><th>휴대폰</th><th>직책</th><th>위촉구분</th><th>임기</th><th>확인</th></tr>' + r.map(function (x, i) { var p = importProblem(x);
+        return '<tr><td>' + (i + 1) + '</td><td>' + esc(x.orgType) + '</td><td>' + esc(x.orgName) + '</td><td>' + esc(x.name) + '</td><td>' + esc(x.agency) + '</td><td>' + esc(x.position) + '</td><td>' + esc(x.mobile) + '</td><td>' + esc(x.role) + '</td><td>' + esc(x.kind) + '</td><td>' + esc(x.termStart) + ' ~ ' + esc(x.termEnd) + '</td><td>' + (p ? '<span style="color:var(--red)">' + esc(p) + '</span>' : '<span style="color:var(--green)">정상</span>') + '</td></tr>'; }).join('') +
+      '</table></div><div class="actions"><button class="b" onclick="S.importRows=null;render()">취소</button><button class="b p" onclick="doImport()">등록</button></div></div>';
+  }
+  return h;
+}
+var IMPORT_COLS = [['orgType','협의체구분'],['orgName','분과/동'],['order','연번'],['agency','소속'],['position','직위'],['name','성명'],['mobile','휴대폰'],['office','사무실'],['fax','팩스'],['role','직책'],['kind','위촉구분'],['termStart','임기시작'],['termEnd','임기종료'],['from','참여시작'],['email','이메일'],['address','주소'],['memo','메모'],['bank','은행'],['number','계좌번호'],['holder','예금주']];
+function importProblem(x) {
+  if (!x.name) return '성명 없음';
+  if (ORG_TYPES.indexOf(x.orgType) < 0) return '협의체 구분 확인';
+  if (orgNames(x.orgType, true).indexOf(x.orgName) < 0) return '분과/동 이름 확인';
+  if (!L_normDate(x.termStart) && NO_TERM_ORGS.indexOf(x.orgType) < 0) return '임기시작 확인';
+  return '';
+}
+function xlsxTemplate() {
+  var ws = XLSX.utils.aoa_to_sheet([IMPORT_COLS.map(function (c) { return c[1]; }), ['실무분과', '노인분과', '1', '(예시)가상복지관', '관장', '홍길동', '010-0000-0000', '000-0000', '000-0000', '분과장', '위촉직', '2025-01-01', '2026-12-31', '', '']]);
+  ws['!cols'] = IMPORT_COLS.map(function () { return { wch: 14 }; });
+  var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '등록양식');
+  var ref = XLSX.utils.aoa_to_sheet([['협의체구분'].concat(ORG_TYPES), ['직책'].concat(ROLES), ['위촉구분'].concat(KINDS)].concat(ORG_TYPES.map(function (t) { return [t + ' 이름'].concat(orgNames(t, true)); })));
+  XLSX.utils.book_append_sheet(wb, ref, '입력값 목록');
+  XLSX.writeFile(wb, '위원명단_일괄등록양식.xlsx');
+}
+function readImport(file) {
+  if (!file) return;
+  var rd = new FileReader();
+  rd.onload = function (e) {
+    var wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+    var rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', raw: false, dateNF: 'yyyy-mm-dd' });
+    var head = rows.shift().map(function (h) { return String(h).replace(/\s/g, ''); });
+    S.importRows = rows.filter(function (r) { return r.join('').trim(); }).map(function (r) {
+      var o = {}; IMPORT_COLS.forEach(function (c) { var i = head.indexOf(c[1]); o[c[0]] = i >= 0 ? String(r[i]).trim() : ''; });
+      o.termStart = L_normDate(o.termStart) || o.termStart; o.termEnd = L_normDate(o.termEnd) || o.termEnd; o.from = L_normDate(o.from) || o.from; return o;
+    });
+    render();
+  };
+  rd.readAsArrayBuffer(file);
+}
+function doImport() {
+  var bad = S.importRows.filter(importProblem).length;
+  if (bad && !confirmBox('확인이 필요한 줄 ' + bad + '건은 등록되지 않습니다. 나머지를 등록할까요?')) return;
+  op('bulkImport', { rows: S.importRows.filter(function (x) { return !importProblem(x); }), reason: v('ir'), basis: v('ib') }, function () { S.importRows = null; render(); });
+}
+function confirmBox(m) { return window.confirm(m); }
+
+function vSettings() {
+  var h = '<div class="card"><h2>협의체·분과·동 목록</h2><div class="muted" style="margin-bottom:10px">숨긴 항목은 목록에서만 빠지고 이력은 그대로 남습니다.</div>';
+  ORG_TYPES.forEach(function (t) {
+    h += '<div class="orghead">' + t + '</div><div class="bar">' + S.db.orgs.filter(function (o) { return o.orgType === t; }).map(function (o) {
+      return '<span class="tag ' + (o.active === 'N' ? 'st-기타' : 'st-재직') + '" style="font-size:14px;padding:4px 9px">' + esc(o.name) + (S.canEdit ? ' <a href="#" onclick="op(\'toggleOrg\',{id:\'' + o.id + '\'});return false">' + (o.active === 'N' ? '사용' : '숨김') + '</a>' : '') + '</span>'; }).join('') +
+      (S.canEdit ? '<input id="no_' + t + '" placeholder="추가할 이름" style="width:150px"><button class="b s" onclick="op(\'addOrg\',{orgType:\'' + t + '\',name:v(\'no_' + t + '\')})">추가</button>' : '') + '</div>';
+  });
+  h += '</div><div class="card"><h2>표창 종류</h2><div class="bar">' + S.db.awardTypes.map(function (t) { return '<span class="tag st-기타" style="font-size:14px;padding:4px 9px">' + esc(t.name) + '</span>'; }).join('') +
+    (S.canEdit ? '<input id="nat" placeholder="예: 대구광역시의회의장상" style="width:200px"><button class="b s" onclick="op(\'addAwardType\',{name:v(\'nat\')})">추가</button>' : '') + '</div></div>';
+  h += '<div class="card"><h2>임기만료 알림</h2><div class="bar">임기 종료일 <input type="number" min="7" max="365" value="' + S.expireDays + '" style="width:80px" onchange="S.expireDays=+this.value||60;try{localStorage.setItem(\'expireDays\',S.expireDays)}catch(e){}"> 일 전부터 처음 화면에 알립니다.</div></div>';
+  if (S.canEdit) { h += '<div class="card"><h2>로그인 계정 (결재권자 공유)</h2><div class="muted" style="margin-bottom:8px">조회 전용 계정은 명단 조회·출력만 할 수 있고 회의수당 계좌는 보이지 않습니다.</div><div id="users" class="scroll">불러오는 중...</div><div class="actions"><button class="b p" onclick="formUser()">+ 조회 계정 만들기</button></div></div>'; setTimeout(loadUsers, 0); }
+  return h;
+}
+
+// ---------- 위원 상세 ----------
+function showMember(id) {
+  var m = member(id); if (!m.id) return;
+  var appts = S.db.appts.filter(function (a) { return a.memberId === id; }).sort(function (a, b) { return a.from < b.from ? 1 : -1; });
+  var aw = S.db.awards.filter(function (w) { return w.memberId === id; }).sort(function (a, b) { return a.year < b.year ? 1 : -1; });
+  var hist = S.db.history.filter(function (h) { return h.memberId === id; }).sort(function (a, b) { return a.date === b.date ? (a.at < b.at ? 1 : -1) : (a.date < b.date ? 1 : -1); });
+  var h = '<h3>' + esc(m.name) + ' <span class="muted">' + esc(m.agency) + ' ' + esc(m.position) + '</span></h3>';
+  h += '<div class="card"><h2>인적사항</h2><div class="form">' + [['휴대폰', m.mobile], ['사무실', m.office], ['팩스', m.fax], ['이메일', m.email], ['주소', m.address], ['메모', m.memo]].map(function (x) { return '<div><div class="muted">' + x[0] + '</div>' + (esc(x[1]) || '-') + '</div>'; }).join('') + '</div>' +
+    (S.canEdit ? '<div class="actions"><button class="b" onclick="formMember(\'' + id + '\')">인적사항 수정</button></div>' : '') + '</div>';
+  if (S.canEdit) {
+    var ac = account(id);
+    h += '<div class="card"><h2>회의수당 입금 계좌 <span class="muted">(관리자만 보임)</span></h2>' + (ac ? '<div><b>' + esc(ac.bank) + '</b> <span id="acn">' + esc(maskNo(ac.number)) + '</span> <a href="#" onclick="document.getElementById(\'acn\').textContent=\'' + esc(ac.number) + '\';this.remove();return false">번호 보기</a> · 예금주 ' + esc(ac.holder) + ' <span class="muted">(' + esc(ac.updatedAt.slice(0, 10)) + ' 저장)</span></div>' : '<div class="muted">등록된 계좌가 없습니다.</div>') +
+      '<div class="actions"><button class="b" onclick="formAccount(\'' + id + '\')">' + (ac ? '계좌 변경' : '계좌 등록') + '</button></div></div>';
+  }
+  h += '<div class="card"><h2>위촉 이력</h2><div class="scroll"><table class="t"><tr><th>협의체/분과</th><th>직책</th><th>구분</th><th>임기</th><th>적용 기간</th><th>상태</th>' + (S.canEdit ? '<th>처리</th>' : '') + '</tr>' + appts.map(function (a) {
+    var st = L_status(a, S.today), live = !a.endDate && st !== '임기만료';
+    var act = S.canEdit ? '<td>' + (!a.endDate ? ['연임', '직책변경', '소속변경', '해촉', '사임'].map(function (t) { return '<button class="b s' + (t === '해촉' || t === '사임' ? ' d' : '') + '" onclick="formChange(\'' + a.id + '\',\'' + t + '\')">' + t + '</button>'; }).join(' ') + ' ' : '') + '<button class="b s" onclick="formFix(\'' + a.id + '\')">정정</button></td>' : '';
+    return '<tr><td>' + esc(a.orgType === a.orgName ? a.orgName : a.orgType + ' · ' + a.orgName) + '</td><td>' + esc(a.role) + '</td><td>' + esc(a.kind) + '</td><td>' + (a.termStart || a.termEnd ? fmt(a.termStart) + ' ~ ' + fmt(a.termEnd) : '<span class="muted">임기 없음</span>') + '</td><td class="muted">' + fmt(a.from) + ' ~ ' + fmt(a.endDate) + '</td><td>' + stTag(st) + '</td>' + act + '</tr>';
+  }).join('') + '</table></div>' + (S.canEdit ? '<div class="actions"><button class="b p" onclick="formAppoint(\'' + id + '\')">+ 다른 협의체에 추가 위촉</button></div>' : '') + '</div>';
+  h += '<div class="card"><h2>유공표창</h2>' + (aw.length ? '<table class="t"><tr><th>연도</th><th>표창</th><th>공적·명칭</th><th>당시 소속</th><th></th></tr>' + aw.map(function (w) {
+    return '<tr' + (w.canceled ? ' style="text-decoration:line-through;color:#999"' : '') + '><td>' + w.year + '</td><td><b>' + esc(w.awardType) + '</b></td><td>' + esc(w.title) + '</td><td>' + esc(w.orgAtTime) + '</td><td>' + (w.canceled ? '취소됨' : (S.canEdit ? '<button class="b s d" onclick="formCancelAward(\'' + w.id + '\')">취소</button>' : '')) + '</td></tr>'; }).join('') + '</table>' : '<div class="muted">기록이 없습니다.</div>') +
+    (S.canEdit ? '<div class="actions"><button class="b" onclick="formAward(\'' + id + '\')">+ 표창 등록</button></div>' : '') + '</div>';
+  h += '<div class="card"><h2>변동이력</h2>' + histTable(hist) + '</div><div class="actions"><button class="b" onclick="closeModal()">닫기</button></div>';
+  openModal(h);
+}
+function reasonFields() { return '<label class="f w2">사유<input id="x_reason" placeholder="예: 기관 인사이동, 분과 회의 결정"></label><label class="f w2">근거<input id="x_basis" placeholder="예: 제3차 대표협의체 회의, 복지정책과-1234(2026.3.2.)"></label>'; }
+
+function formAppoint(mid) {
+  if (!needEdit()) return;
+  var m = mid ? member(mid) : null, t = S.f.orgType || '실무분과';
+  var h = '<h3>' + (m ? esc(m.name) + ' 위원 추가 위촉' : '새 위원 위촉') + '</h3><div class="form">';
+  if (!m) h += '<label class="f">성명 *<input id="x_name"></label><label class="f">소속기관<input id="x_agency"></label><label class="f">직위<input id="x_position"></label><label class="f">휴대폰<input id="x_mobile" placeholder="010-0000-0000"></label><label class="f">사무실<input id="x_office"></label><label class="f">팩스<input id="x_fax"></label><label class="f">이메일<input id="x_email"></label><label class="f w2">주소<input id="x_address"></label>';
+  h += '<label class="f">협의체 구분 *<select id="x_orgType" onchange="document.getElementById(\'x_orgName\').innerHTML=opts(orgNames(this.value))">' + opts(ORG_TYPES, t) + '</select></label>' +
+    '<label class="f">분과/동 *<select id="x_orgName">' + opts(orgNames(t), S.f.orgName) + '</select></label>' +
+    '<label class="f">직책<select id="x_role">' + opts(L_roles(S.db), '위원') + '</select></label><label class="f">위촉구분<select id="x_kind">' + opts(KINDS, '위촉직') + '</select></label>' +
+    '<label class="f">임기 시작 (실무분과는 비움)<input type="date" id="x_termStart" value="' + (NO_TERM_ORGS.indexOf(t) >= 0 ? '' : S.today) + '"></label><label class="f">임기 종료<input type="date" id="x_termEnd"></label><label class="f">참여 시작일<input type="date" id="x_from" value="' + S.today + '"></label>' + reasonFields() + '</div>';
+  if (!m) h += '<div class="muted">이미 등록된 위원이면 [위원 찾기]에서 그 위원을 열어 [추가 위촉]을 눌러 주세요. 그래야 이력이 한 사람으로 이어집니다.</div>';
+  h += '<div class="actions"><button class="b" onclick="' + (mid ? 'showMember(\'' + mid + '\')' : 'closeModal()') + '">취소</button><button class="b p" onclick="saveAppoint(\'' + (mid || '') + '\')">위촉 등록</button></div>';
+  openModal(h);
+}
+function saveAppoint(mid) {
+  var x = { memberId: mid, orgType: v('x_orgType'), orgName: v('x_orgName'), role: v('x_role'), kind: v('x_kind'), termStart: v('x_termStart'), termEnd: v('x_termEnd'), from: v('x_from'), reason: v('x_reason'), basis: v('x_basis') };
+  if (!mid) ['name', 'agency', 'position', 'mobile', 'office', 'fax', 'email', 'address'].forEach(function (k) { x[k] = v('x_' + k); });
+  op('appoint', x, mid ? function () { showMember(mid); } : null);
+}
+function account(id) { var r = null; (S.db.accounts || []).forEach(function (a) { if (a.memberId === id) r = a; }); return r; }
+function maskNo(n) { n = String(n || ''); return n.length > 4 ? n.slice(0, -4).replace(/\d/g, '*') + n.slice(-4) : n; }
+function formAccount(id) {
+  var m = member(id), ac = account(id) || {};
+  openModal('<h3>' + esc(m.name) + ' 위원 회의수당 입금 계좌</h3><div class="form"><label class="f">은행 *<input id="x_bank" value="' + esc(ac.bank) + '" placeholder="예: 대구은행"></label><label class="f">계좌번호 *<input id="x_number" value="' + esc(ac.number) + '" placeholder="숫자와 - 만"></label><label class="f">예금주<input id="x_holder" value="' + esc(ac.holder || m.name) + '"></label>' + reasonFields() +
+    '</div><div class="muted">계좌는 결재권자와 공유하지 않는 별도 시트에 저장됩니다. 변동이력에는 계좌번호 없이 "계좌 변경"만 남습니다.</div><div class="actions"><button class="b" onclick="showMember(\'' + id + '\')">취소</button><button class="b p" onclick="op(\'setAccount\',{memberId:\'' + id + '\',bank:v(\'x_bank\'),number:v(\'x_number\'),holder:v(\'x_holder\'),reason:v(\'x_reason\'),basis:v(\'x_basis\')},function(){showMember(\'' + id + '\')})">저장</button></div>');
+}
+function xlsxAccounts() {
+  var f = S.f, list = f.orgName ? [f.orgName] : orgNames(f.orgType), out = [['협의체/분과', '연번', '성명', '소속', '직위', '은행', '계좌번호', '예금주']], miss = 0;
+  list.forEach(function (n) { L_roster(S.db, f.orgType, n, f.date || S.today).forEach(function (r, i) { var ac = account(r.member.id) || {}; if (!ac.number) miss++; out.push([n, i + 1, r.member.name, r.member.agency, r.member.position, ac.bank || '', ac.number || '', ac.holder || '']); }); });
+  var ws = XLSX.utils.aoa_to_sheet(out); ws['!cols'] = [{ wch: 16 }, { wch: 5 }, { wch: 9 }, { wch: 26 }, { wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 9 }];
+  var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '수당계좌');
+  XLSX.writeFile(wb, (f.date || S.today).replace(/-/g, '') + ' ' + (f.orgName || f.orgType) + ' 회의수당 계좌.xlsx');
+  if (miss) toast('계좌가 없는 위원 ' + miss + '명은 빈칸으로 나갑니다.');
+}
+function formMember(id) {
+  var m = member(id);
+  var f = [['name', '성명'], ['agency', '소속기관'], ['position', '직위'], ['mobile', '휴대폰'], ['office', '사무실'], ['fax', '팩스'], ['email', '이메일'], ['address', '주소'], ['memo', '메모']];
+  openModal('<h3>인적사항 수정</h3><div class="form">' + f.map(function (x) { return '<label class="f">' + x[1] + '<input id="x_' + x[0] + '" value="' + esc(m[x[0]]) + '"></label>'; }).join('') + reasonFields() +
+    '</div><div class="muted">수정 전 내용은 변동이력에 남습니다.</div><div class="actions"><button class="b" onclick="showMember(\'' + id + '\')">취소</button><button class="b p" onclick="saveMember(\'' + id + '\')">저장</button></div>');
+}
+function saveMember(id) {
+  var x = { memberId: id, reason: v('x_reason'), basis: v('x_basis') };
+  ['name', 'agency', 'position', 'mobile', 'office', 'fax', 'email', 'address', 'memo'].forEach(function (k) { x[k] = v('x_' + k); });
+  op('updateMember', x, function () { showMember(id); });
+}
+function formChange(aid, type) {
+  var a = L_find(S.db.appts, aid), m = member(a.memberId), h = '<h3>' + esc(m.name) + ' · ' + esc(a.orgName) + ' ' + type + '</h3><div class="form">';
+  if (type === '연임') h += '<label class="f">새 임기 시작 *<input type="date" id="x_termStart" value="' + (a.termEnd ? L_addDays(a.termEnd, 1) : S.today) + '"></label><label class="f">새 임기 종료<input type="date" id="x_termEnd"></label><label class="f">직책<select id="x_role">' + opts(L_roles(S.db), a.role) + '</select></label>';
+  else if (type === '직책변경') h += '<label class="f">새 직책 *<select id="x_role">' + opts(L_roles(S.db), '', '선택') + '</select></label><label class="f">변경일 *<input type="date" id="x_date" value="' + S.today + '"></label>';
+  else if (type === '소속변경') h += '<label class="f">협의체 구분<select id="x_orgType" onchange="document.getElementById(\'x_orgName\').innerHTML=opts(orgNames(this.value))">' + opts(ORG_TYPES, a.orgType) + '</select></label><label class="f">새 분과/동 *<select id="x_orgName">' + opts(orgNames(a.orgType), '') + '</select></label><label class="f">새 직책<select id="x_role">' + opts(L_roles(S.db), '위원') + '</select></label><label class="f">변경일 *<input type="date" id="x_date" value="' + S.today + '"></label>';
+  else h += '<label class="f">' + type + '일 *<input type="date" id="x_date" value="' + S.today + '"></label>';
+  h += reasonFields() + '</div><div class="actions"><button class="b" onclick="showMember(\'' + m.id + '\')">취소</button><button class="b p" onclick="saveChange(\'' + aid + '\',\'' + type + '\')">' + type + ' 처리</button></div>';
+  openModal(h);
+}
+function saveChange(aid, type) {
+  var a = L_find(S.db.appts, aid), x = { apptId: aid, reason: v('x_reason'), basis: v('x_basis') }, name;
+  if (type === '연임') { name = 'renew'; x.termStart = v('x_termStart'); x.termEnd = v('x_termEnd'); x.role = v('x_role'); }
+  else if (type === '직책변경') { name = 'changeRole'; x.role = v('x_role'); x.date = v('x_date'); }
+  else if (type === '소속변경') { name = 'changeOrg'; x.orgType = v('x_orgType'); x.orgName = v('x_orgName'); x.role = v('x_role'); x.date = v('x_date'); }
+  else { name = 'endAppt'; x.type = type; x.date = v('x_date'); }
+  op(name, x, function () { showMember(a.memberId); });
+}
+function formFix(aid) {
+  var a = L_find(S.db.appts, aid);
+  openModal('<h3>위촉 내용 정정 (입력 실수 바로잡기)</h3><div class="form"><label class="f">위촉구분<select id="x_kind">' + opts(KINDS, a.kind) + '</select></label><label class="f">임기 시작<input type="date" id="x_termStart" value="' + a.termStart + '"></label><label class="f">임기 종료<input type="date" id="x_termEnd" value="' + a.termEnd + '"></label><label class="f">명단 순서(연번)<input type="number" id="x_order" value="' + esc(a.order) + '"></label>' + reasonFields() +
+    '</div><div class="muted">위촉·해촉 같은 실제 변동은 정정이 아니라 해당 버튼으로 처리해 주세요. 정정 전 값은 이력에 남습니다.</div><div class="actions"><button class="b" onclick="showMember(\'' + a.memberId + '\')">취소</button><button class="b p" onclick="op(\'fixAppt\',{apptId:\'' + aid + '\',kind:v(\'x_kind\'),termStart:v(\'x_termStart\'),termEnd:v(\'x_termEnd\'),order:v(\'x_order\'),reason:v(\'x_reason\'),basis:v(\'x_basis\')},function(){showMember(\'' + a.memberId + '\')})">정정 저장</button></div>');
+}
+function formAward(mid) {
+  if (!needEdit()) return;
+  var who = mid ? '<input type="hidden" id="x_mid" value="' + mid + '"><div><div class="muted">위원</div><b>' + esc(member(mid).name) + '</b> ' + esc(member(mid).agency) + '</div>'
+    : '<label class="f w2">위원 *<select id="x_mid">' + opts(S.db.members.slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'ko'); }).map(function (m) { return [m.id, m.name + ' (' + m.agency + ')']; }), '', '선택') + '</select></label>';
+  openModal('<h3>유공표창 등록</h3><div class="form">' + who + '<label class="f">표창 종류 *<select id="x_type">' + opts(S.db.awardTypes.map(function (t) { return t.name; }), '', '선택') + '</select></label>' +
+    '<label class="f">수상 연도 *<input id="x_year" type="number" value="' + S.today.slice(0, 4) + '"></label><label class="f">수상일<input type="date" id="x_date"></label>' +
+    '<label class="f w2">공적·명칭<input id="x_title" placeholder="예: 사회복지의 날 유공"></label><label class="f">당시 소속(비우면 자동)<input id="x_org"></label><label class="f">비고<input id="x_memo"></label>' + reasonFields() + '</div>' +
+    '<div class="actions"><button class="b" onclick="' + (mid ? 'showMember(\'' + mid + '\')' : 'closeModal()') + '">취소</button><button class="b p" onclick="saveAward(' + (mid ? 'true' : 'false') + ')">등록</button></div>');
+}
+function saveAward(back) {
+  var mid = v('x_mid');
+  op('addAward', { memberId: mid, awardType: v('x_type'), year: v('x_year'), date: v('x_date'), title: v('x_title'), orgAtTime: v('x_org'), memo: v('x_memo'), reason: v('x_reason'), basis: v('x_basis') }, back ? function () { showMember(mid); } : null);
+}
+function formCancelAward(wid) {
+  var w = L_find(S.db.awards, wid);
+  openModal('<h3>표창 기록 취소</h3><p>' + w.year + '년 ' + esc(w.awardType) + ' 기록을 취소 표시합니다. 기록은 지워지지 않고 취소선으로 남습니다.</p><div class="form">' + reasonFields() + '</div><div class="actions"><button class="b" onclick="showMember(\'' + w.memberId + '\')">돌아가기</button><button class="b p d" onclick="op(\'cancelAward\',{id:\'' + wid + '\',reason:v(\'x_reason\'),basis:v(\'x_basis\')},function(){showMember(\'' + w.memberId + '\')})">취소 처리</button></div>');
+}
+
+// ---------- 출력 ----------
+function spec() { return L_printSections(S.db, S.f.orgType, S.f.orgName, S.f.date || S.today, { councilName: COUNCIL, hideContact: S.f.hideContact }); }
+function printView() {
+  var sp = spec();
+  if (!sp.sections.length) return alertMsg('출력할 명단이 없습니다.');
+  document.getElementById('pages').innerHTML = sp.sections.map(function (s) {
+    return '<div class="page' + (sp.header.length > 6 ? ' land' : '') + '"><h1>' + esc(s.title) + '</h1>' + (s.subtitle ? '<h2>' + esc(s.subtitle) + '</h2>' : '') + '<div class="base">(' + fmt(sp.baseDate) + '. 기준)</div><table><colgroup>' + sp.widths.map(function (w) { return '<col style="width:' + (100 * w / sp.widths.reduce(function (a, b) { return a + b; }, 0)).toFixed(1) + '%">'; }).join('') + '</colgroup><tr>' +
+      sp.header.map(function (x) { return '<th>' + esc(x) + '</th>'; }).join('') + '</tr>' + s.rows.map(function (r) { return '<tr>' + r.map(function (c, i) { return '<td>' + esc(c) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table></div>';
+  }).join('');
+  document.getElementById('print').style.display = 'block';
+}
+function closePrint() { document.getElementById('print').style.display = 'none'; }
+function fileName(ext) { var f = S.f; return (f.date || S.today).replace(/-/g, '') + ' ' + COUNCIL + ' ' + (f.orgName || f.orgType) + ' 명단.' + ext; }
+function saveB64(b64, name, mime) {
+  var bin = atob(b64), arr = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([arr], { type: mime })); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+}
+function download(fmtType) {
+  var sp = spec(); if (!sp.sections.length) return alertMsg('출력할 명단이 없습니다.');
+  if (window.PREVIEW) { if (fmtType === 'pdf') return printView(); return xlsxLocal(sp); }
+  call('exportFile', [JSON.stringify(sp), fmtType], function (b64) {
+    saveB64(b64, fileName(fmtType), fmtType === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  });
+}
+function xlsxLocal(sp) {
+  var wb = XLSX.utils.book_new();
+  sp.sections.forEach(function (s) { var ws = XLSX.utils.aoa_to_sheet([[s.title], [s.subtitle], ['(' + fmt(sp.baseDate) + '. 기준)'], sp.header].concat(s.rows)); ws['!cols'] = sp.widths.map(function (w) { return { wch: Math.round(w / 7) }; }); XLSX.utils.book_append_sheet(wb, ws, s.orgName.slice(0, 30)); });
+  XLSX.writeFile(wb, fileName('xlsx'));
+}
+function xlsxAwards() {
+  var rows = S.db.awards.filter(function (w) { return !w.canceled && (!S.af.year || w.year === S.af.year) && (!S.af.type || w.awardType === S.af.type); });
+  var ws = XLSX.utils.aoa_to_sheet([['연도', '수상일', '표창', '성명', '소속기관', '직위', '당시 소속 협의체', '공적·명칭', '비고']].concat(rows.map(function (w) { var m = member(w.memberId); return [w.year, w.date, w.awardType, m.name, m.agency, m.position, w.orgAtTime, w.title, w.memo]; })));
+  var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '유공표창'); XLSX.writeFile(wb, '위원 유공표창 이력' + (S.af.year ? '_' + S.af.year : '') + '.xlsx');
+}
+function xlsxHistory() {
+  var ws = XLSX.utils.aoa_to_sheet([['변동일', '구분', '성명', '이전', '이후', '사유', '근거', '처리일시', '처리자']].concat(S.db.history.map(function (h) { return [h.date, h.type, member(h.memberId).name, h.before, h.after, h.reason, h.basis, h.at, h.user]; })));
+  var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '변동이력'); XLSX.writeFile(wb, '위원 변동이력_' + S.today.replace(/-/g, '') + '.xlsx');
+}
+
+// ---------- 시작 ----------
+document.getElementById('modal').addEventListener('click', function (e) { if (e.target.id === 'modal') closeModal(); });
+try { S.token = sessionStorage.getItem('rosterToken') || ''; } catch (e) {}
+if (S.token) loadData(); else showLogin();
+</script>
+</body>
+</html>
