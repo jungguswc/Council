@@ -86,11 +86,31 @@
   .cert .sign { text-align:center; font-size:17pt; font-weight:bold; position:relative; }
   .cert .sign img { position:absolute; width:27mm; height:27mm; object-fit:contain; margin-left:-14mm; margin-top:-8mm; }
   .cert .sign .seal { font-size:12pt; font-weight:normal; color:#555; margin-left:3mm; }
+  /* 위촉 동의서 */
+  .page.cs { font-family:'Malgun Gothic','맑은 고딕',sans-serif; padding:12mm 14mm; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .cs table.g { width:100%; border-collapse:collapse; table-layout:fixed; border:1.5px solid #000; }
+  .cs table.g td { border:1px solid #000; padding:.6mm 1.2mm; font-size:9.5pt; text-align:center; vertical-align:middle; white-space:pre-wrap; font-family:inherit; word-break:keep-all; }
+  .cs table.g td.lb { background:#ececec; font-weight:bold; }
+  .cs table.g td.sec { text-align:left; font-weight:bold; font-size:11pt; background:#fff; }
+  .cs table.g td.ttl { font-size:15pt; font-weight:bold; letter-spacing:1px; }
+  .cs table.g td.att { font-size:10pt; text-align:left; }
+  .cs table.g td.par { text-align:left; font-size:9pt; line-height:1.4; padding:1.5mm 2.5mm; }
+  .cs table.g td.law { font-size:11pt; line-height:1.65; }
+  .cs table.g td.v { font-size:10.5pt; }
+  .cs .reply { font-size:9.5pt; margin-bottom:2mm; min-height:4mm; }
+  .cs h1 { text-align:center; font-size:20pt; margin:2mm 0 6mm; }
+  .cs .idl { font-size:12pt; line-height:1.9; margin-left:8mm; }
+  .cs .idt { font-size:12pt; line-height:1.8; margin:6mm 4mm; }
+  .cs .disq { border:1.5px solid #000; margin-top:6mm; font-size:8.5pt; line-height:1.45; }
+  .cs .disq .h { text-align:center; font-weight:bold; font-size:12pt; padding:2mm; border-bottom:1px solid #000; background:#ececec; }
+  .cs .disq .b { padding:3mm 4mm; white-space:pre-wrap; }
   @media print {
     body > *:not(#print) { display:none !important; }
+    body { background:#fff !important; }
     #print { display:block !important; position:static; background:#fff; padding:0; }
     #print .tools { display:none; }
     .page { box-shadow:none; margin:0; width:auto; min-height:0; padding:0; page-break-after:always; }
+    .page:last-child { page-break-after:auto; }
     @page { size:A4; margin:16mm 14mm; }
     @page land { size:A4 landscape; margin:14mm 12mm; }
   }
@@ -248,7 +268,7 @@ function vRoster() {
     '<span class="sp"></span>' +
     (S.canEdit ? '<button class="b p" onclick="formAppoint()">+ 위원 위촉</button>' : '') + '</div>' +
     '<div class="bar"><label><input type="checkbox" ' + (f.hideContact ? 'checked' : '') + ' onchange="S.f.hideContact=this.checked"> 출력할 때 연락처 빼기</label><span class="sp"></span>' +
-    '<button class="b" onclick="printView()">한글 양식으로 보기·인쇄</button><button class="b" onclick="download(\'xlsx\')">엑셀 내려받기</button><button class="b" onclick="download(\'pdf\')">PDF 내려받기</button>' + (S.canEdit ? '<button class="b" onclick="xlsxAccounts()">회의수당 계좌 목록</button>' : '') + '</div>' +
+    '<button class="b" onclick="printView()">한글 양식으로 보기·인쇄</button><button class="b" onclick="download(\'xlsx\')">엑셀 내려받기</button><button class="b" onclick="download(\'pdf\')">PDF 내려받기</button>' + (S.canEdit ? '<button class="b" onclick="formConsentBulk()">위촉동의서 출력</button><button class="b" onclick="xlsxAccounts()">회의수당 계좌 목록</button>' : '') + '</div>' +
     '<div id="rt"></div></div>';
   setTimeout(renderRosterTable, 0);
   return h;
@@ -424,12 +444,85 @@ function showMember(id) {
     return '<tr' + (w.canceled ? ' style="text-decoration:line-through;color:#999"' : '') + '><td>' + w.year + '</td><td>' + esc([w.event, w.awardName].filter(Boolean).join(' · ')) + '</td><td><b>' + esc(w.awardType) + '</b></td><td>' + esc(w.title) + '</td><td>' + esc(w.orgAtTime) + '</td><td>' + (w.canceled ? '취소됨' : (S.canEdit ? '<button class="b s d" onclick="formCancelAward(\'' + w.id + '\')">취소</button>' : '')) + '</td></tr>'; }).join('') + '</table>' : '<div class="muted">기록이 없습니다.</div>') +
     (S.canEdit ? '<div class="actions"><button class="b" onclick="formAward(\'' + id + '\')">+ 표창 등록</button></div>' : '') + '</div>';
   var certs = (S.db.certs || []).filter(function (c) { return c.memberId === id; }).sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : -1; });
-  h += '<div class="card"><h2>위원 활동 확인서</h2>' + (certs.length ? '<table class="t"><tr><th>발급번호</th><th>발급일</th><th>용도</th><th>처리자</th><th></th></tr>' + certs.map(function (c) {
+  h += '<div class="card"><h2>활동확인서 · 위촉동의서</h2>' + (certs.length ? '<table class="t"><tr><th>발급번호</th><th>발급일</th><th>용도</th><th>처리자</th><th></th></tr>' + certs.map(function (c) {
     return '<tr><td>' + esc(c.no) + '</td><td>' + fmt(c.issueDate) + '</td><td>' + esc(c.purpose) + '</td><td class="muted">' + esc(c.user) + '</td><td><button class="b s" onclick="formCert(\'' + id + '\',\'' + c.id + '\')">다시 출력</button></td></tr>'; }).join('') + '</table>' : '<div class="muted">발급 기록이 없습니다.</div>') +
-    (S.canEdit ? '<div class="actions"><button class="b p" onclick="formCert(\'' + id + '\')">활동확인서 발급</button></div>' : '') + '</div>';
+    (S.canEdit ? '<div class="actions"><button class="b" onclick="formConsent(\'' + id + '\')">위촉동의서 출력</button><button class="b p" onclick="formCert(\'' + id + '\')">활동확인서 발급</button></div>' : '') + '</div>';
   h += '<div class="card"><h2>변동이력</h2>' + histTable(hist) + '</div><div class="actions"><button class="b" onclick="closeModal()">닫기</button></div>';
   openModal(h);
 }
+// ---------- 위촉 동의서 ----------
+var CONSENT_TPL = {"rep": {"w": [5.33, 2.66, 2.66, 2.96, 2.96, 7.4, 7.4, 13.02, 22.49, 5.92, 5.92, 10.65, 10.65], "cells": [[0, 0, 1, 4, 9.0, "붙임 2"], [0, 4, 1, 9, 9.0, "11기 중구지역사회보장협의체 위원 위촉 동의서"], [1, 0, 1, 13, 0.7, ""], [2, 0, 1, 9, 3.2, "1. 인적사항"], [2, 9, 1, 2, 3.2, "접수번호"], [2, 11, 1, 2, 3.2, "대구 중구 2026-"], [3, 0, 1, 3, 6.5, "성 명"], [3, 3, 1, 4, 6.5, ""], [3, 7, 1, 1, 6.5, "주민등록번호"], [3, 8, 1, 1, 6.5, ""], [3, 9, 1, 2, 5.4, "신청구분"], [3, 11, 1, 2, 6.5, " 대표협의체위원"], [4, 0, 1, 5, 6.5, "등록기준지\n(본적)"], [4, 5, 1, 4, 6.5, ""], [4, 9, 1, 2, 5.4, "휴대전화"], [4, 11, 1, 2, 6.5, ""], [5, 0, 1, 5, 5.3, "계좌번호"], [5, 5, 1, 4, 5.3, ""], [5, 9, 1, 2, 5.3, "담당업무\n/직위"], [5, 11, 1, 2, 5.3, ""], [6, 0, 4, 1, 15.6, "소속\n기관\n·\n단체"], [6, 1, 1, 5, 5.7, "기관, 단체명"], [6, 6, 1, 3, 5.7, ""], [6, 9, 2, 2, 7.1, "전화번호"], [6, 11, 2, 2, 7.1, "053)"], [7, 1, 2, 5, 3.7, "E-mail"], [7, 6, 2, 3, 3.7, ""], [8, 9, 2, 2, 8.3, "팩스번호"], [8, 11, 2, 2, 8.3, "053)"], [9, 1, 1, 5, 6.0, "주소\n(*우편수신)"], [9, 6, 1, 3, 6.0, ""], [10, 0, 1, 13, 3.2, "2. 신청 분야 및 주요경력사항"], [11, 0, 6, 5, 24.7, "구 분\n(해당부문√표시, 중복가능)"], [11, 5, 2, 2, 8.8, "사회보장영역"], [11, 7, 1, 1, 4.0, "지역돌봄 □"], [11, 8, 1, 2, 4.0, "보호안전 □"], [11, 10, 1, 3, 4.0, "  교육복지 □"], [12, 7, 1, 1, 4.8, "고용복지 □"], [12, 8, 1, 2, 4.8, "여가문화 □"], [12, 10, 1, 2, 4.8, "주거환경 □"], [12, 12, 1, 1, 4.8, "건강증진 □"], [13, 5, 4, 2, 16.0, "소속"], [13, 7, 1, 6, 4.0, "□ 사회보장관련 학식과 경험이 풍부한 자"], [14, 7, 1, 6, 4.0, "□ 사회보장관련 서비스 제공하는 공공기관, 법인, 단체"], [15, 7, 1, 6, 4.0, "□ 시민대표, 연구기관, 공익단체"], [16, 7, 1, 6, 4.0, "□ 고용, 주거, 교육, 여가문화, 환경, 생활체육, 기업체 관련 단체"], [17, 0, 4, 2, 13.8, "주요\n경력"], [17, 2, 1, 5, 4.0, "기 간"], [17, 7, 1, 1, 4.0, "직 장 명"], [17, 8, 1, 1, 4.0, "직 위"], [17, 9, 1, 4, 4.0, "담 당 업 무"], [18, 2, 1, 5, 3.2, ""], [18, 7, 1, 1, 3.2, ""], [18, 8, 1, 1, 3.2, ""], [18, 9, 1, 4, 3.2, ""], [19, 2, 1, 5, 3.2, ""], [19, 7, 1, 1, 3.2, ""], [19, 8, 1, 1, 3.2, ""], [19, 9, 1, 4, 3.2, ""], [20, 2, 1, 5, 3.2, ""], [20, 7, 1, 1, 3.2, ""], [20, 8, 1, 1, 3.2, ""], [20, 9, 1, 4, 3.2, ""], [21, 0, 1, 13, 3.2, "3. 신청 동기"], [22, 0, 1, 13, 7.6, ""], [23, 0, 1, 13, 32.6, "상기와 같이 「사회보장급여의 이용,제공 및 수급권자 발굴에 관한 법률」\n제41조의 규정에 의거 대구중구지역사회보장협의체 대표협의체 위원으로 \n위촉됨을 동의합니다.\n2026년     월     일  \n                                             성 명 :                     (인)\n대구광역시중구지역사회보장협의체 위원장 귀하"], [24, 0, 1, 13, 29.1, "※ 개인정보 수집,이용 안내\n중구지역사회보장협의체 위원 위촉 및 위원회의 원활한 운영을 위하여 다음과 같이 개인정보를 수집,이용하며, 수집된 정보는 서비스 제공의 목적 외 용도로는 사용되지 않습니다.\n○ 개인정보 수집,이용 목적 : 중구지역사회보장협의체 운영 및 복지관련 시책 홍보 등\n○ 개인정보 수집,이용 기간 : 신청일로부터 본인의 취소 요청시 까지\n○ 수집되는 개인정보 항목 : 주소, 생년월일(주민등록번호), 경력, 휴대전화번호, e-mail\n○ 개인정보 수집에 거부할 수 있으며, 동의 거부시 지역사회보장협의체 위원 자격이 제한됩니다.\n 개인정보 수집에 관한 위 내용을 확인 하였으며 개인정보 수집, 이용에 동의합니다 □"]]}, "sil": {"w": [5.33, 2.66, 2.66, 2.96, 2.96, 7.4, 7.4, 13.02, 22.49, 5.92, 5.92, 10.65, 10.65], "cells": [[0, 0, 1, 4, 9.0, "붙임 2"], [0, 4, 1, 9, 9.0, "11기 중구지역사회보장협의체 위원 위촉 동의서"], [1, 0, 1, 13, 0.7, ""], [2, 0, 1, 9, 3.2, "1. 인적사항"], [2, 9, 1, 2, 3.2, "접수번호"], [2, 11, 1, 2, 3.2, "대구 중구 2026-"], [3, 0, 1, 3, 6.5, "성 명"], [3, 3, 1, 4, 6.5, ""], [3, 7, 1, 1, 6.5, "주민등록번호"], [3, 8, 1, 1, 6.5, ""], [3, 9, 1, 2, 6.5, "신청구분"], [3, 11, 1, 2, 6.5, " 실무협의체위원"], [4, 0, 1, 5, 6.5, "계좌번호"], [4, 5, 1, 4, 6.5, ""], [4, 9, 1, 2, 6.5, "휴대전화"], [4, 11, 1, 2, 6.5, ""], [5, 0, 5, 1, 18.2, "소속\n기관\n·\n단체"], [5, 1, 2, 5, 5.5, "기관, 단체명"], [5, 6, 2, 3, 5.5, ""], [5, 9, 1, 2, 5.3, "담당업무\n/직위"], [5, 11, 1, 2, 5.3, ""], [6, 9, 2, 2, 6.5, "전화번호"], [6, 11, 2, 2, 6.5, "053)"], [7, 1, 2, 5, 6.5, "E-mail"], [7, 6, 2, 3, 6.5, ""], [8, 9, 2, 2, 6.5, "팩스번호"], [8, 11, 2, 2, 6.5, "053)"], [9, 1, 1, 5, 6.2, "주소\n(*우편수신)"], [9, 6, 1, 3, 6.2, ""], [10, 0, 1, 13, 3.2, "2. 신청 분야 및 주요경력사항"], [11, 0, 6, 5, 20.5, "구 분\n(해당부문√표시, 중복가능)"], [11, 5, 2, 2, 7.4, "사회보장영역"], [11, 7, 1, 1, 3.2, "지역돌봄 □"], [11, 8, 1, 2, 3.2, "보호안전 □"], [11, 10, 1, 3, 3.2, "  교육복지 □"], [12, 7, 1, 1, 4.1, "고용복지 □"], [12, 8, 1, 2, 4.1, "여가문화 □"], [12, 10, 1, 2, 4.1, "주거환경 □"], [12, 12, 1, 1, 4.1, "건강증진 □"], [13, 5, 4, 2, 13.1, "소속"], [13, 7, 1, 6, 3.2, "□ 사회보장관련 학식과 경험이 풍부한 자"], [14, 7, 1, 6, 3.2, "□ 사회보장관련 서비스 제공하는 공공기관, 법인, 단체"], [15, 7, 1, 6, 3.2, "□ 시민대표, 연구기관, 공익단체"], [16, 7, 1, 6, 3.2, "□ 고용, 주거, 교육, 여가문화, 환경, 생활체육, 기업체 관련 단체"], [17, 0, 4, 2, 13.1, "주요\n경력"], [17, 2, 1, 5, 3.2, "기 간"], [17, 7, 1, 1, 3.2, "직 장 명"], [17, 8, 1, 1, 3.2, "직 위"], [17, 9, 1, 4, 3.2, "담 당 업 무"], [18, 2, 1, 5, 3.2, ""], [18, 7, 1, 1, 3.2, ""], [18, 8, 1, 1, 3.2, ""], [18, 9, 1, 4, 3.2, ""], [19, 2, 1, 5, 3.2, ""], [19, 7, 1, 1, 3.2, ""], [19, 8, 1, 1, 3.2, ""], [19, 9, 1, 4, 3.2, ""], [20, 2, 1, 5, 3.2, ""], [20, 7, 1, 1, 3.2, ""], [20, 8, 1, 1, 3.2, ""], [20, 9, 1, 4, 3.2, ""], [21, 0, 1, 13, 3.2, "3. 신청 동기"], [22, 0, 1, 13, 6.9, ""], [23, 0, 1, 13, 32.6, "상기와 같이 「사회보장급여의 이용,제공 및 수급권자 발굴에 관한 법률」\n제41조의 규정에 의거 대구중구지역사회보장협의체 실무협의체 위원으로 \n위촉됨을 동의합니다.\n2026년     월     일  \n                                             성 명 :                     (인)\n대구광역시중구지역사회보장협의체 위원장 귀하"], [24, 0, 1, 13, 29.3, "※ 개인정보 수집,이용 안내\n중구지역사회보장협의체 위원 위촉 및 위원회의 원활한 운영을 위하여 다음과 같이 개인정보를 수집,이용하며, 수집된 정보는 서비스 제공의 목적 외 용도로는 사용되지 않습니다.\n○ 개인정보 수집,이용 목적 : 중구지역사회보장협의체 운영 및 복지관련 시책 홍보 등\n○ 개인정보 수집,이용 기간 : 신청일로부터 본인의 취소 요청시 까지\n○ 수집되는 개인정보 항목 : 주소, 생년월일(주민등록번호), 경력, 휴대전화번호, e-mail\n○ 개인정보 수집에 거부할 수 있으며, 동의 거부시 지역사회보장협의체 위원 자격이 제한됩니다.\n 개인정보 수집에 관한 위 내용을 확인 하였으며 개인정보 수집, 이용에 동의합니다 □"]]}, "bun": {"w": [5.33, 2.66, 2.66, 2.96, 2.96, 7.4, 7.4, 7.1, 5.92, 22.49, 5.92, 5.92, 10.65, 10.65], "cells": [[0, 0, 1, 4, 8.3, "붙임 2"], [0, 4, 1, 10, 8.3, "중구지역사회보장협의체 분과위원 위촉 동의서"], [1, 0, 1, 14, 0.7, ""], [2, 0, 1, 10, 4.0, "1. 인적사항"], [2, 10, 1, 2, 4.0, "접수번호"], [2, 12, 1, 2, 4.0, " 대구 중구 2026 -"], [3, 0, 1, 3, 6.5, "성 명"], [3, 3, 1, 4, 6.5, ""], [3, 7, 1, 2, 6.5, "생년월일"], [3, 9, 1, 1, 6.5, ""], [3, 10, 1, 2, 5.4, "신청구분"], [3, 12, 1, 2, 6.5, " 실무분과 (사회적고립예방)"], [4, 0, 1, 5, 6.5, "계좌번호"], [4, 5, 1, 5, 6.5, ""], [4, 10, 1, 2, 5.4, "휴대전화"], [4, 12, 1, 2, 6.5, ""], [5, 0, 3, 1, 18.2, "소속\n기관\n·\n단체"], [5, 1, 1, 5, 5.3, "기관,단체명"], [5, 6, 1, 4, 5.3, ""], [5, 10, 1, 2, 5.3, "담당업무\n/직위"], [5, 12, 1, 2, 5.3, ""], [6, 1, 1, 5, 6.5, "주소"], [6, 6, 1, 4, 6.5, ""], [6, 10, 1, 2, 5.4, "전화번호"], [6, 12, 1, 2, 6.5, "053)"], [7, 1, 1, 5, 6.5, "E-mail"], [7, 6, 1, 2, 6.5, "기관□ 개인□"], [7, 8, 1, 2, 6.5, ""], [7, 10, 1, 2, 5.4, "팩스번호"], [7, 12, 1, 2, 6.5, "053)"], [8, 0, 1, 14, 5.4, "2. 신청 분야 및 주요경력사항"], [9, 0, 6, 5, 24.7, "구 분\n(해당부문√표시, 중복가능)"], [9, 5, 2, 2, 8.8, "사회보장영역"], [9, 7, 1, 2, 4.0, "지역돌봄 □"], [9, 9, 1, 2, 4.0, "보호안전 □"], [9, 11, 1, 3, 4.0, "  교육복지 □"], [10, 7, 1, 2, 4.8, "고용복지 □"], [10, 9, 1, 2, 4.8, "여가문화 □"], [10, 11, 1, 2, 4.8, "주거환경 □"], [10, 13, 1, 1, 4.8, "건강증진 □"], [11, 5, 4, 2, 16.0, "소속"], [11, 7, 1, 7, 4.0, "□ 사회보장관련 학식과 경험이 풍부한 자"], [12, 7, 1, 7, 4.0, "□ 사회보장관련 서비스 제공하는 공공기관, 법인, 단체"], [13, 7, 1, 7, 4.0, "□ 시민대표, 연구기관, 공익단체"], [14, 7, 1, 7, 4.0, "□ 고용, 주거, 교육, 여가문화, 환경, 생활체육, 기업체 관련 단체"], [15, 0, 4, 2, 16.0, "주요\n경력"], [15, 2, 1, 5, 4.0, "기 간"], [15, 7, 1, 2, 4.0, "직 장 명"], [15, 9, 1, 1, 4.0, "직 위"], [15, 10, 1, 4, 4.0, "담 당 업 무"], [16, 2, 1, 5, 4.0, ""], [16, 7, 1, 2, 4.0, ""], [16, 9, 1, 1, 4.0, ""], [16, 10, 1, 4, 4.0, ""], [17, 2, 1, 5, 4.0, ""], [17, 7, 1, 2, 4.0, ""], [17, 9, 1, 1, 4.0, ""], [17, 10, 1, 4, 4.0, ""], [18, 2, 1, 5, 4.0, ""], [18, 7, 1, 2, 4.0, ""], [18, 9, 1, 1, 4.0, ""], [18, 10, 1, 4, 4.0, ""], [19, 0, 1, 14, 4.0, "3. 신청 동기"], [20, 0, 1, 14, 7.6, ""], [21, 0, 1, 14, 33.0, " 상기와 같이 「사회보장급여법 시행규칙」제6조제5항에 의거\n 대구중구지역사회보장협의체 실무분과 위원으로 위촉됨을 동의합니다.\n2026년     월     일  \n                                             성 명 :                     (인)\n대구광역시중구지역사회보장협의체 위원장 귀하"], [22, 0, 1, 14, 27.3, "※ 개인정보 수집,이용 안내\n중구지역사회보장협의체 위원 위촉 및 위원회의 원활한 운영을 위하여 다음과 같이 개인정보를 수집, 이용하며, 수집된 정보는 서비스 제공의 목적 외 용도로는 사용되지 않습니다.\n○ 개인정보 수집,이용 목적 : 중구지역사회보장협의체 운영 및 복지관련 시책 홍보 등\n○ 개인정보 수집,이용 기간 : 신청일로부터 본인의 취소 요청시 까지\n○ 수집되는 개인정보 항목 : 주소, 생년월일(주민등록번호), 경력, 휴대전화번호, e-mail\n○ 개인정보 수집에 거부할 수 있으며, 동의 거부 시 지역사회보장협의체 위원 자격이 제한됩니다.\n 개인정보 수집에 관한 위 내용을 확인 하였으며 개인정보 수집, 이용에 동의합니다 □"]]}};
+var CONSENT_KEY = { '대표협의체': 'rep', '실무협의체': 'sil', '실무분과': 'bun' };
+var CONSENT_LABELS = ['성 명', '주민등록번호', '생년월일', '신청구분', '등록기준지', '계좌번호', '휴대전화', '담당업무', '소속', '기관', '전화번호', 'E-mail', '팩스번호', '주소', '접수번호', '구 분', '사회보장영역', '주요', '기 간', '직 장 명', '직 위', '담 당 업 무'];
+// 값이 들어갈 칸 [행,열] → 위원 정보
+var CONSENT_FILL = {
+  rep: { '3,3': 'name', '3,11': 'kindLabel', '4,11': 'mobile', '5,11': 'position', '6,6': 'agency', '6,11': 'office', '7,6': 'email', '8,11': 'fax', '9,6': 'address' },
+  sil: { '3,3': 'name', '3,11': 'kindLabel', '4,11': 'mobile', '5,6': 'agency', '5,11': 'position', '6,11': 'office', '7,6': 'email', '8,11': 'fax', '9,6': 'address' },
+  bun: { '3,3': 'name', '3,12': 'kindLabel', '4,12': 'mobile', '5,6': 'agency', '5,12': 'position', '6,6': 'address', '6,12': 'office', '7,8': 'email', '7,12': 'fax' }
+};
+var DISQ_TEXT = '「사회보장급여의 이용·제공 및 수급권자 발굴에 관한 법률」 제40조 제4항에 따라 다음 각 호의 어느 하나에 해당하는 사람은 시·군·구 사회보장위원회(지역사회보장협의체)의 위원이 될 수 없다.\n  1. 미성년자\n  2. 금치산자 또는 한정치산자\n  3. 파산선고를 받고 복권되지 아니한 사람\n  4. 법원의 판결에 따라 자격이 상실되거나 정지된 사람\n  5. 금고 이상의 실형을 선고받고 그 집행이 끝나거나(집행이 끝난 것으로 보는 경우를 포함한다) 집행이 면제된 날부터 3년이 지나지 아니한 사람\n  6. 금고 이상의 형의 집행유예를 선고받고 그 유예기간 중에 있는 사람\n  7. 제5호 및 제6호에도 불구하고 사회복지사업 또는 그 직무와 관련하여 「아동복지법」 제71조, 「보조금 관리에 관한 법률」 제40조부터 제42조까지 또는 「형법」 제28장·제40장(제360조는 제외한다)의 죄를 범하거나 이 법을 위반하여 다음 각 목의 어느 하나에 해당하는 사람\n     가. 100만원 이상의 벌금형을 선고받고 그 형이 확정된 후 5년이 지나지 아니한 사람\n     나. 형의 집행유예를 선고받고 그 형이 확정된 후 7년이 지나지 아니한 사람\n     다. 징역형을 선고받고 그 집행이 끝나거나(집행이 끝난 것으로 보는 경우를 포함한다) 집행이 면제된 날부터 7년이 지나지 아니한 사람\n  8. 제5호부터 제7호까지의 규정에도 불구하고 「성폭력범죄의 처벌 등에 관한 특례법」 제2조의 성폭력범죄(「성폭력범죄의 처벌 등에 관한 특례법」 제2조제1항제1호는 제외한다) 또는 「아동·청소년의 성보호에 관한 법률」 제2조제2호의 아동·청소년대상 성범죄를 저지른 사람으로서 형 또는 치료감호를 선고받고 확정된 후 그 형 또는 치료감호의 전부 또는 일부의 집행이 끝나거나(집행이 끝난 것으로 보는 경우를 포함한다) 집행이 유예·면제된 날부터 10년이 지나지 아니한 사람';
+function consentOpt() { var o = { gi: '11', year: S.today.slice(0, 4), reply: '' }; try { var x = JSON.parse(localStorage.getItem('consentOpt') || '{}'); for (var k in x) o[k] = x[k]; } catch (e) {} return o; }
+function consentSaveOpt(o) { try { localStorage.setItem('consentOpt', JSON.stringify(o)); } catch (e) {} }
+function consentPages(orgType, m, a, o) {
+  var key = CONSENT_KEY[orgType], T = CONSENT_TPL[key], fill = CONSENT_FILL[key];
+  var d = m ? { name: m.name, mobile: m.mobile, position: m.position, agency: m.agency, office: m.office, email: m.email, fax: m.fax, address: m.address } : {};
+  d.kindLabel = key === 'bun' ? ' 실무분과 (' + (a ? String(a.orgName).replace(/분과$/, '') : '          ') + ')' : ' ' + orgType + '위원';
+  var hs = {}; T.cells.forEach(function (c) { if (c[2] === 1) hs[c[0]] = Math.max(hs[c[0]] || 0, c[4]); });
+  var rows = {}; T.cells.forEach(function (c) { (rows[c[0]] = rows[c[0]] || []).push(c); });
+  var h = '<div class="page cs"><div class="reply">' + esc(o.reply) + '</div><table class="g"><colgroup>' + T.w.map(function (w) { return '<col style="width:' + w + '%">'; }).join('') + '</colgroup>';
+  Object.keys(rows).map(Number).sort(function (a, b) { return a - b; }).forEach(function (r) {
+    h += '<tr style="height:' + (hs[r] || 6) + 'mm">' + rows[r].sort(function (a, b) { return a[1] - b[1]; }).map(function (c) {
+      var t = c[5], f = fill[c[0] + ',' + c[1]], cls = '';
+      if (f) { t = d[f] || ''; if ((f === 'office' || f === 'fax') && !t) t = '053)'; cls = 'v'; }
+      else if (c[0] === 0 && c[1] === 0) cls = 'att';
+      else if (c[0] === 0) { cls = 'ttl'; t = t.replace(/^\d+기/, o.gi ? o.gi + '기' : ''); }
+      else if (/^\d\. /.test(t)) cls = 'sec';
+      else if (/^※/.test(t)) cls = 'par';
+      else if (/위촉됨을 동의합니다/.test(t)) { cls = 'law'; t = t.replace(/20\d\d년/, o.year + '년'); }
+      else if (/^접수번호/.test(t)) cls = 'lb';
+      else if (/^\s*대구 중구 20\d\d/.test(t)) t = '대구 중구 ' + o.year + '-' + (o.no || '');
+      else if (CONSENT_LABELS.some(function (l) { return t.indexOf(l) === 0; })) cls = 'lb';
+      return '<td' + (c[2] > 1 ? ' rowspan="' + c[2] + '"' : '') + (c[3] > 1 ? ' colspan="' + c[3] + '"' : '') + (cls ? ' class="' + cls + '"' : '') + '>' + esc(t) + '</td>';
+    }).join('') + '</tr>';
+  });
+  h += '</table></div>';
+  if (key === 'rep') h += '<div class="page cs"><div class="att" style="font-size:10pt">[붙임3]</div><h1>개인 신원조회 동의서</h1><div class="idl">○ 성&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;명 : ' + esc(d.name || '') + '<br>○ 등 록 기 준 지 : <br>○ 주&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;소 : ' + esc(d.address || '') + '<br>○ 주민등록번호 : </div>' +
+    '<div class="idt">&nbsp;&nbsp;본인은 「사회보장급여의 이용·제공 및 수급권자 발굴에 관한 법률」 제40조 제4항에 따라 지역사회보장대표협의체위원 임명 또는 위촉 시 결격사유 조회를 위한 신원조회에 동의합니다.</div>' +
+    '<div style="text-align:center;font-size:12pt;margin:5mm 0">' + o.year + '.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.</div><div style="text-align:right;font-size:12pt;margin-right:10mm">위 동의자&nbsp;&nbsp;&nbsp;&nbsp;' + esc(d.name || '&nbsp;'.repeat(10)) + '&nbsp;&nbsp;&nbsp;&nbsp;(서명)</div>' +
+    '<div style="text-align:center;font-size:14pt;font-weight:bold;margin:6mm 0 0">대구광역시중구지역사회보장협의체 귀중</div><div class="disq"><div class="h">결격사유</div><div class="b">' + esc(DISQ_TEXT) + '</div></div></div>';
+  else if (key === 'sil') h += '<div class="page cs"><div class="disq" style="margin-top:0"><div class="h">결격사유</div><div class="b">' + esc(DISQ_TEXT) + '</div></div></div>';
+  return h;
+}
+function consentShow(html) { document.getElementById('pages').innerHTML = html; document.getElementById('print').style.display = 'block'; }
+function consentOptFields(o) {
+  return '<label class="f">기수 <span class="muted">(대표·실무)</span><input id="cs_gi" value="' + esc(o.gi) + '" style="width:80px"></label><label class="f">작성 연도<input id="cs_year" value="' + esc(o.year) + '" style="width:90px"></label>' +
+    '<label class="f w2">맨 위 회신 안내 <span class="muted">(이 컴퓨터에 기억)</span><input id="cs_reply" value="' + esc(o.reply) + '" placeholder="예: ※ FAX(053-000-0000) / 이메일 회신요망"></label>';
+}
+function consentReadOpt() { var o = { gi: v('cs_gi'), year: v('cs_year') || S.today.slice(0, 4), reply: v('cs_reply') }; consentSaveOpt(o); return o; }
+function formConsent(mid) {
+  var m = member(mid), o = consentOpt();
+  var appts = S.db.appts.filter(function (a) { return a.memberId === mid && CONSENT_KEY[a.orgType]; }).sort(function (a, b) { return (a.from || '') < (b.from || '') ? 1 : -1; });
+  if (!appts.length) return alertMsg('위촉동의서 양식은 대표협의체, 실무협의체, 실무분과만 있습니다. 이 위원은 해당 위촉 기록이 없습니다.');
+  openModal('<h3>' + esc(m.name) + ' 위원 위촉동의서</h3><div class="form"><label class="f w2">양식<select id="cs_appt">' + opts(appts.map(function (x) { return [x.id, certOrgLabel(x) + ' · ' + fmt(x.termStart || x.from) + ' ~']; }), appts[0].id) + '</select></label><label class="f">접수번호 뒷자리<input id="cs_no" placeholder="비워도 됨" style="width:100px"></label>' + consentOptFields(o) + '</div>' +
+    '<div class="muted" style="margin-bottom:8px">성명·소속·연락처·주소는 앱의 정보로 채워집니다. 주민등록번호·생년월일·등록기준지·계좌번호는 빈칸으로 나오니 본인이 직접 적습니다.</div>' +
+    '<div class="actions"><button class="b" onclick="closeModal()">취소</button><button class="b p" onclick="var a=L_find(S.db.appts,v(\'cs_appt\')),o=consentReadOpt();o.no=v(\'cs_no\');closeModal();consentShow(consentPages(a.orgType,member(\'' + mid + '\'),a,o))">출력</button></div>');
+}
+function formConsentBulk() {
+  var f = S.f, o = consentOpt();
+  if (!CONSENT_KEY[f.orgType]) return alertMsg('위촉동의서 양식은 대표협의체, 실무협의체, 실무분과만 있습니다. 위쪽 협의체 구분을 바꿔 주세요.');
+  var list = f.orgName ? [f.orgName] : orgNames(f.orgType), n = 0;
+  list.forEach(function (x) { n += L_roster(S.db, f.orgType, x, f.date || S.today).length; });
+  openModal('<h3>' + esc(f.orgName || f.orgType) + ' 위촉동의서 출력</h3><div class="form">' + consentOptFields(o) + '</div>' +
+    '<div class="muted" style="margin-bottom:8px">' + fmt(f.date || S.today) + ' 기준 재직 위원 ' + n + '명의 동의서를 한 번에 만듭니다. 새로 오는 위원용으로 빈 양식도 뽑을 수 있습니다.</div>' +
+    '<div class="actions"><button class="b" onclick="closeModal()">취소</button><button class="b" onclick="consentBlank()">빈 양식 1장</button><button class="b p" onclick="consentBulk()"' + (n ? '' : ' disabled') + '>' + n + '명 출력</button></div>');
+}
+function consentBlank() { var o = consentReadOpt(), f = S.f; closeModal(); consentShow(consentPages(f.orgType, null, f.orgName ? { orgName: f.orgName } : null, o)); }
+function consentBulk() {
+  var o = consentReadOpt(), f = S.f, h = ''; closeModal();
+  (f.orgName ? [f.orgName] : orgNames(f.orgType)).forEach(function (x) { L_roster(S.db, f.orgType, x, f.date || S.today).forEach(function (r) { h += consentPages(f.orgType, r.member, r.appt, o); }); });
+  consentShow(h);
+}
+
 // ---------- 위원 활동 확인서 ----------
 function fmtK(d) { if (!d) return ''; var p = d.split('-'); return +p[0] + '. ' + (+p[1]) + '. ' + (+p[2]) + '.'; }
 function certOrgLabel(a) { return a.orgType === a.orgName ? a.orgName : a.orgType + ' (' + a.orgName + ')'; }
