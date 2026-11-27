@@ -9,7 +9,7 @@ var ORG_TYPES = ['대표협의체', '실무협의체', '실무분과', '전문�
 var NO_TERM_ORGS = ['실무분과'];
 var KINDS = ['당연직', '임명직', '위촉직'];
 var ROLES = ['위원장', '공동위원장', '부위원장', '분과장', '간사', '총무', '위원'];
-var CHANGE_TYPES = ['위촉', '해촉', '사임', '연임', '직책변경', '소속변경', '정보수정', '위촉정정', '일괄등록', '표창등록', '표창취소', '계좌변경'];
+var CHANGE_TYPES = ['위촉', '해촉', '사임', '연임', '직책변경', '소속변경', '정보수정', '위촉정정', '일괄등록', '표창등록', '표창취소', '계좌변경', '확인서발급'];
 
 var TABLES = {
   members: ['id', 'name', 'agency', 'position', 'mobile', 'office', 'fax', 'email', 'address', 'memo', 'createdAt', 'updatedAt'],
@@ -18,11 +18,12 @@ var TABLES = {
   orgs: ['id', 'orgType', 'name', 'order', 'active'],
   awards: ['id', 'memberId', 'year', 'date', 'awardType', 'title', 'orgAtTime', 'memo', 'canceled', 'createdAt', 'awardName', 'event', 'personName', 'personAgency', 'personPosition'],
   awardTypes: ['id', 'name', 'order'],
-  accounts: ['memberId', 'bank', 'number', 'holder', 'updatedAt']
+  accounts: ['memberId', 'bank', 'number', 'holder', 'updatedAt'],
+  certs: ['id', 'no', 'year', 'seq', 'memberId', 'apptId', 'issueDate', 'purpose', 'detail', 'user', 'createdAt']
 };
 /** 관리자만 보는 표: 결재권자와 공유하지 않는 별도 시트에 저장 */
 var SECRET_TABLES = ['accounts'];
-var TABLE_LABELS = { members: '위원', appts: '위촉', history: '변동이력', orgs: '조직', awards: '표창', awardTypes: '표창종류', accounts: '수당계좌' };
+var TABLE_LABELS = { members: '위원', appts: '위촉', history: '변동이력', orgs: '조직', awards: '표창', awardTypes: '표창종류', accounts: '수당계좌', certs: '확인서발급대장' };
 var DEFAULT_AWARD_TYPES = ['보건복지부장관상', '대구광역시장상', '중구청장상']; // 훈격
 var AWARD_NAMES = ['지역복지유공표창']; // 표창명 기본값(직접 입력 가능)
 var AWARD_EVENTS = ['중구복지박람회', '성과보고회']; // 수여 행사 기본값(직접 입력 가능)
@@ -76,7 +77,7 @@ function L_trim(v) { return v === null || v === undefined ? '' : String(v).trim(
 function L_fail(msg) { throw new Error(msg); }
 
 function L_emptyDb() {
-  var db = { members: [], appts: [], history: [], orgs: [], awards: [], awardTypes: [], accounts: [] };
+  var db = { members: [], appts: [], history: [], orgs: [], awards: [], awardTypes: [], accounts: [], certs: [] };
   DEFAULT_AWARD_TYPES.forEach(function (n, i) { db.awardTypes.push({ id: 'T' + (i + 1), name: n, order: String(i + 1) }); });
   DEFAULT_ORGS.forEach(function (o, i) { db.orgs.push({ id: 'O' + (i + 1), orgType: o[0], name: o[1], order: String(i + 1), active: 'Y' }); });
   return db;
@@ -372,6 +373,23 @@ var L_OPS = {
     if (db.awardTypes.some(function (t) { return t.name === n; })) L_fail('이미 있는 표창입니다.');
     db.awardTypes.push({ id: L_nextId(db.awardTypes, 'T'), name: n, order: String(db.awardTypes.length + 1) });
     return { msg: n + '을(를) 표창 종류에 추가했습니다.', changed: ['awardTypes'] };
+  },
+  /** 위원 활동 확인서 발급: 발급번호(연도별 일련번호)를 매기고 발급대장에 남긴다. 생년월일은 저장하지 않는다. */
+  issueCert: function (db, ctx, x) {
+    if (!db.certs) db.certs = [];
+    var m = L_find(db.members, x.memberId); if (!m) L_fail('위원을 찾을 수 없습니다.');
+    var d = L_trim(x.issueDate) || ctx.today, y = d.slice(0, 4), seq;
+    var used = db.certs.filter(function (c) { return c.year === y; }).map(function (c) { return parseInt(c.seq, 10) || 0; });
+    if (L_trim(x.seq)) {
+      seq = parseInt(x.seq, 10); if (!(seq > 0)) L_fail('발급번호 숫자를 확인해 주세요.');
+      if (used.indexOf(seq) >= 0) L_fail(y + '년 ' + seq + '번은 이미 발급된 번호입니다.');
+    } else seq = used.reduce(function (a, b) { return Math.max(a, b); }, 0) + 1;
+    var no = '중구협의체 제' + y + '-' + ('00' + seq).slice(-3) + '호';
+    var detail = x.detail || {}; delete detail.birth;
+    var c = { id: L_nextId(db.certs, 'C'), no: no, year: y, seq: String(seq), memberId: m.id, apptId: L_trim(x.apptId), issueDate: d, purpose: L_trim(x.purpose), detail: JSON.stringify(detail), user: ctx.user, createdAt: ctx.now };
+    db.certs.push(c);
+    L_log(db, ctx, { date: d, memberId: m.id, apptId: c.apptId, type: '확인서발급', reason: c.purpose, after: no });
+    return { msg: no + ' 위원 활동 확인서를 발급했습니다.', changed: ['certs', 'history'] };
   },
   /** 협의체·분과·동 추가 */
   addOrg: function (db, ctx, x) {

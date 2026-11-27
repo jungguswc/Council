@@ -71,6 +71,21 @@
   .page table { width:100%; border-collapse:collapse; border:2px solid #000; }
   .page th, .page td { border:1px solid #000; text-align:center; vertical-align:middle; font-size:11pt; padding:2.2mm 1.5mm; white-space:pre-line; font-family:'Malgun Gothic','맑은 고딕',sans-serif; }
   .page th { background:#d9d9d9; font-weight:bold; }
+  /* 위원 활동 확인서 */
+  .page.cert { font-family:'Malgun Gothic','맑은 고딕',sans-serif; padding:14mm 16mm; color:#111; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .cert .no { color:#555; font-size:10pt; margin-bottom:4mm; }
+  .cert .ttl { background:#eceef3; border-top:2.2mm solid #1e6fc8; border-bottom:2.2mm solid #d6303a; text-align:center; padding:6mm 2mm; font-size:21pt; font-weight:bold; color:#1f3864; letter-spacing:.5px; margin-bottom:8mm; }
+  .cert h4 { font-size:12.5pt; margin:6mm 0 2.5mm; }
+  .cert h4:before { content:'■'; color:#1f3c88; margin-right:2mm; }
+  .cert table { width:100%; border-collapse:collapse; border:1.5px solid #555; }
+  .cert th, .cert td { border:1px solid #555; padding:2.6mm 2mm; font-size:11.5pt; font-family:inherit; white-space:pre-line; }
+  .cert th { background:#e7e9ef; font-weight:bold; text-align:center; }
+  .cert td.l { text-align:left; padding-left:3mm; }
+  .cert .msg { text-align:center; font-size:13pt; line-height:2.4; margin-top:8mm; }
+  .cert .dt { text-align:center; font-size:13pt; margin:5mm 0 6mm; }
+  .cert .sign { text-align:center; font-size:17pt; font-weight:bold; position:relative; }
+  .cert .sign img { position:absolute; width:27mm; height:27mm; object-fit:contain; margin-left:-14mm; margin-top:-8mm; }
+  .cert .sign .seal { font-size:12pt; font-weight:normal; color:#555; margin-left:3mm; }
   @media print {
     body > *:not(#print) { display:none !important; }
     #print { display:block !important; position:static; background:#fff; padding:0; }
@@ -407,8 +422,103 @@ function showMember(id) {
   h += '<div class="card"><h2>유공표창</h2>' + (aw.length ? '<table class="t"><tr><th>연도</th><th>수여 행사·표창명</th><th>훈격</th><th>공적</th><th>당시 소속</th><th></th></tr>' + aw.map(function (w) {
     return '<tr' + (w.canceled ? ' style="text-decoration:line-through;color:#999"' : '') + '><td>' + w.year + '</td><td>' + esc([w.event, w.awardName].filter(Boolean).join(' · ')) + '</td><td><b>' + esc(w.awardType) + '</b></td><td>' + esc(w.title) + '</td><td>' + esc(w.orgAtTime) + '</td><td>' + (w.canceled ? '취소됨' : (S.canEdit ? '<button class="b s d" onclick="formCancelAward(\'' + w.id + '\')">취소</button>' : '')) + '</td></tr>'; }).join('') + '</table>' : '<div class="muted">기록이 없습니다.</div>') +
     (S.canEdit ? '<div class="actions"><button class="b" onclick="formAward(\'' + id + '\')">+ 표창 등록</button></div>' : '') + '</div>';
+  var certs = (S.db.certs || []).filter(function (c) { return c.memberId === id; }).sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : -1; });
+  h += '<div class="card"><h2>위원 활동 확인서</h2>' + (certs.length ? '<table class="t"><tr><th>발급번호</th><th>발급일</th><th>용도</th><th>처리자</th><th></th></tr>' + certs.map(function (c) {
+    return '<tr><td>' + esc(c.no) + '</td><td>' + fmt(c.issueDate) + '</td><td>' + esc(c.purpose) + '</td><td class="muted">' + esc(c.user) + '</td><td><button class="b s" onclick="formCert(\'' + id + '\',\'' + c.id + '\')">다시 출력</button></td></tr>'; }).join('') + '</table>' : '<div class="muted">발급 기록이 없습니다.</div>') +
+    (S.canEdit ? '<div class="actions"><button class="b p" onclick="formCert(\'' + id + '\')">활동확인서 발급</button></div>' : '') + '</div>';
   h += '<div class="card"><h2>변동이력</h2>' + histTable(hist) + '</div><div class="actions"><button class="b" onclick="closeModal()">닫기</button></div>';
   openModal(h);
+}
+// ---------- 위원 활동 확인서 ----------
+function fmtK(d) { if (!d) return ''; var p = d.split('-'); return +p[0] + '. ' + (+p[1]) + '. ' + (+p[2]) + '.'; }
+function certOrgLabel(a) { return a.orgType === a.orgName ? a.orgName : a.orgType + ' (' + a.orgName + ')'; }
+function certActKind(a) { return { '대표협의체': '대표협의체 정기회의', '실무협의체': '실무협의체 정기회의', '실무분과': '분과 정기회의', '전문위원회': '전문위원회 회의', '동협의체': '동협의체 정기회의' }[a.orgType] || '정기회의'; }
+function certDefaults(m, a) {
+  var start = a.termStart || a.from || '', end = a.endDate || (a.termEnd && a.termEnd < S.today ? a.termEnd : '');
+  var y1 = +(start || S.today).slice(0, 4), y2 = +(end || S.today).slice(0, 4), acts = [];
+  for (var y = y1; y <= y2 && acts.length < 10; y++) acts.push({ year: String(y), kind: certActKind(a), held: '', att: '', content: a.orgType === '실무분과' ? a.orgName + ' 사업논의' : '' });
+  return { agency: m.agency, position: m.position, orgLabel: certOrgLabel(a), role: a.orgType + ' ' + (a.role || '위원'), start: start, end: end, acts: acts,
+    sentenceOrg: a.orgType === '동협의체' ? a.orgName + ' 동협의체' : a.orgType, purpose: '협의체 활동 확인용' };
+}
+function certSeal() { try { return localStorage.getItem('certSeal') || ''; } catch (e) { return ''; } }
+function formCert(mid, certId) {
+  var m = member(mid), c = certId ? L_find(S.db.certs, certId) : null;
+  if (!c && !needEdit()) return;
+  var appts = S.db.appts.filter(function (a) { return a.memberId === mid; }).sort(function (a, b) { return (a.from || '') < (b.from || '') ? 1 : -1; });
+  if (!appts.length) return alertMsg('위촉 기록이 없어 확인서를 만들 수 없습니다.');
+  var a = (c && L_find(S.db.appts, c.apptId)) || appts[0];
+  var d = c ? JSON.parse(c.detail || '{}') : certDefaults(m, a);
+  S.cert = { mid: mid, certId: certId || '', apptId: a.id, acts: d.acts || [] };
+  var h = '<h3>' + esc(m.name) + ' 위원 활동 확인서 ' + (c ? '다시 출력 <span class="muted">' + esc(c.no) + '</span>' : '발급') + '</h3>';
+  if (!c) h += '<div class="form"><label class="f w2">위촉 기록 선택<select onchange="certPickAppt(this.value)">' + opts(appts.map(function (x) { return [x.id, certOrgLabel(x) + ' · ' + (x.role || '') + ' · ' + fmt(x.termStart || x.from) + ' ~ ' + fmt(x.endDate || x.termEnd)]; }), a.id) + '</select></label></div>';
+  h += '<div class="form"><label class="f">생년월일 <span class="muted">(저장 안 함)</span><input id="c_birth" type="date"></label><label class="f">소속기관<input id="c_agency" value="' + esc(d.agency) + '"></label><label class="f">직위<input id="c_position" value="' + esc(d.position) + '"></label>' +
+    '<label class="f w2">구분<input id="c_org" value="' + esc(d.orgLabel) + '"></label><label class="f">협의체 직위<input id="c_role" value="' + esc(d.role) + '"></label>' +
+    '<label class="f">활동 시작<input id="c_start" type="date" value="' + esc(d.start) + '"></label><label class="f">활동 끝 <span class="muted">(비우면 현재)</span><input id="c_end" type="date" value="' + esc(d.end) + '"></label>' +
+    '<label class="f">용도<input id="c_purpose" value="' + esc(c ? c.purpose : d.purpose) + '"></label><label class="f w2">확인 문구 협의체명 <span class="muted">("…협의체 ○○ 위원으로")</span><input id="c_sorg" value="' + esc(d.sentenceOrg) + '"></label>' +
+    '<label class="f">발급일<input id="c_date" type="date" value="' + esc(c ? c.issueDate : S.today) + '"' + (c ? ' disabled' : '') + '></label>' +
+    (c ? '' : '<label class="f">발급번호 <span class="muted">(비우면 자동)</span><input id="c_seq" inputmode="numeric" placeholder="예: 5 → 제' + S.today.slice(0, 4) + '-005호"></label>') + '</div>';
+  h += '<h2 style="font-size:15px">활동내역 <span class="muted" style="font-weight:normal">개최·참석 횟수는 숫자만 넣으면 됩니다</span></h2><div id="c_acts"></div><div class="actions" style="justify-content:flex-start"><button class="b s" onclick="certAddRow()">+ 줄 추가</button></div>';
+  h += '<div class="form" style="margin-top:10px"><label class="f w2">직인 이미지 <span class="muted">(선택 · 이 컴퓨터에만 저장)</span><input type="file" accept="image/*" onchange="certSetSeal(this.files[0])"></label><div class="f"><span class="muted" id="c_sealst">' + (certSeal() ? '저장된 직인 있음 · <a href="#" onclick="certSetSeal(null);return false">지우기</a>' : '없으면 (직인) 글자로 나옵니다') + '</span></div></div>';
+  h += '<div class="actions"><button class="b" onclick="closeModal()">취소</button>' + (c ? '<button class="b p" onclick="certPrint()">출력</button>' : '<button class="b" onclick="certPrint(true)">미리보기</button><button class="b p" onclick="certIssue()">발급번호 받고 출력</button>') + '</div>';
+  openModal(h); certRows();
+}
+function certPickAppt(id) {
+  var a = L_find(S.db.appts, id), d = certDefaults(member(S.cert.mid), a);
+  S.cert.apptId = id; S.cert.acts = d.acts;
+  [['c_org', d.orgLabel], ['c_role', d.role], ['c_start', d.start], ['c_end', d.end], ['c_sorg', d.sentenceOrg]].forEach(function (x) { document.getElementById(x[0]).value = x[1]; });
+  certRows();
+}
+function certSync() {
+  document.querySelectorAll('#c_acts tr[data-i]').forEach(function (tr) { var r = S.cert.acts[+tr.getAttribute('data-i')]; tr.querySelectorAll('input').forEach(function (e) { r[e.name] = e.value.trim(); }); });
+}
+function certRows() {
+  var el = document.getElementById('c_acts'); if (!el) return;
+  el.innerHTML = '<div class="scroll"><table class="t"><tr><th style="width:70px">연도</th><th>활동 구분</th><th style="width:70px">개최</th><th style="width:70px">참석</th><th>주요 활동내용</th><th></th></tr>' + S.cert.acts.map(function (r, i) {
+    return '<tr data-i="' + i + '"><td><input name="year" value="' + esc(r.year) + '" style="width:60px"></td><td><input name="kind" value="' + esc(r.kind) + '"></td><td><input name="held" value="' + esc(r.held) + '" style="width:55px" inputmode="numeric"></td><td><input name="att" value="' + esc(r.att) + '" style="width:55px" inputmode="numeric"></td><td><input name="content" value="' + esc(r.content) + '" style="width:100%"></td><td><button class="b s d" onclick="certSync();S.cert.acts.splice(' + i + ',1);certRows()">삭제</button></td></tr>'; }).join('') + '</table></div>';
+}
+function certAddRow() { certSync(); var last = S.cert.acts[S.cert.acts.length - 1] || {}; S.cert.acts.push({ year: last.year ? String(+last.year + 1) : S.today.slice(0, 4), kind: last.kind || '', held: '', att: '', content: last.content || '' }); certRows(); }
+function certSetSeal(f) {
+  function done(v) { try { if (v) localStorage.setItem('certSeal', v); else localStorage.removeItem('certSeal'); } catch (e) { S.sealMem = v; } var st = document.getElementById('c_sealst'); if (st) st.innerHTML = v ? '저장된 직인 있음 · <a href="#" onclick="certSetSeal(null);return false">지우기</a>' : '없으면 (직인) 글자로 나옵니다'; }
+  if (!f) return done('');
+  var r = new FileReader(); r.onload = function () { done(r.result); }; r.readAsDataURL(f);
+}
+function certData() {
+  certSync();
+  return { agency: v('c_agency'), position: v('c_position'), orgLabel: v('c_org'), role: v('c_role'), start: v('c_start'), end: v('c_end'), sentenceOrg: v('c_sorg'), purpose: v('c_purpose'),
+    acts: S.cert.acts.filter(function (r) { return r.year || r.kind || r.held || r.att || r.content; }) };
+}
+function certIssue() {
+  var d = certData(), date = v('c_date') || S.today, birth = v('c_birth');
+  if (!d.start) return alertMsg('활동 시작일을 넣어 주세요.');
+  op('issueCert', { memberId: S.cert.mid, apptId: S.cert.apptId, issueDate: date, seq: v('c_seq'), purpose: d.purpose, detail: d }, function () {
+    var c = S.db.certs.filter(function (x) { return x.memberId === S.cert.mid; }).sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : (a.createdAt > b.createdAt ? -1 : (+b.id.slice(1)) - (+a.id.slice(1))); })[0];
+    certRender(member(S.cert.mid), d, c.no, date, birth);
+  });
+}
+function certPrint(preview) {
+  var d = certData(), c = S.cert.certId ? L_find(S.db.certs, S.cert.certId) : null;
+  if (!d.start) return alertMsg('활동 시작일을 넣어 주세요.');
+  var birth = v('c_birth'); closeModal();
+  certRender(member(S.cert.mid), d, c ? c.no : '(발급 시 부여)', c ? c.issueDate : (v('c_date') || S.today), birth, preview);
+}
+function certRender(m, d, no, date, birth, preview) {
+  function n(x) { var k = parseInt(String(x).replace(/[^0-9]/g, ''), 10); return isNaN(k) ? 0 : k; }
+  function cnt(x) { return x === '' || x === undefined ? '' : n(x) + '회'; }
+  var held = 0, att = 0; d.acts.forEach(function (r) { held += n(r.held); att += n(r.att); });
+  var seal = certSeal() || S.sealMem || '', dp = date.split('-');
+  var h = '<div class="page cert"><div class="no">발급번호 : ' + esc(no) + (preview ? ' <b style="color:#d6303a">[미리보기 · 발급 전]</b>' : '') + '</div><div class="ttl">대구 중구지역사회보장협의체 위원 활동 확인서</div>' +
+    '<h4>1. 인적사항</h4><table><colgroup><col style="width:17%"><col style="width:33%"><col style="width:17%"><col style="width:33%"></colgroup><tr><th>성&nbsp;&nbsp;&nbsp;&nbsp;명</th><td style="text-align:center">' + esc(m.name) + '</td><th>생년월일</th><td style="text-align:center">' + esc(fmtK(birth)) + '</td></tr>' +
+    '<tr><th>소속기관</th><td style="text-align:center">' + esc(d.agency) + '</td><th>직&nbsp;&nbsp;&nbsp;&nbsp;위</th><td style="text-align:center">' + esc(d.position) + '</td></tr></table>' +
+    '<h4>2. 위촉사항</h4><table><colgroup><col style="width:17%"><col></colgroup><tr><th>구&nbsp;&nbsp;&nbsp;&nbsp;분</th><td class="l">' + esc(d.orgLabel) + '</td></tr><tr><th>협의체 직위</th><td class="l">' + esc(d.role) + '</td></tr><tr><th>활동기간</th><td class="l">' + esc(fmtK(d.start)) + '&nbsp;&nbsp;~&nbsp;&nbsp;' + esc(d.end ? fmtK(d.end) : '현재') + '</td></tr></table>' +
+    '<h4>3. 활동내역</h4><table><colgroup><col style="width:11.5%"><col style="width:20%"><col style="width:13.5%"><col style="width:13.5%"><col></colgroup><tr><th>연도</th><th>활동 구분</th><th>개최 횟수</th><th>참석 횟수</th><th>주요 활동내용</th></tr>' +
+    d.acts.map(function (r) { return '<tr><td style="text-align:center">' + esc(r.year) + '</td><td style="text-align:center">' + esc(r.kind) + '</td><td style="text-align:center">' + cnt(r.held) + '</td><td style="text-align:center">' + cnt(r.att) + '</td><td class="l">' + esc(r.content) + '</td></tr>'; }).join('') +
+    '<tr><th colspan="2">계</th><td style="text-align:center"><b>' + held + '회</b></td><td style="text-align:center"><b>' + att + '회</b></td><td></td></tr></table>' +
+    '<h4>4. 용도</h4><table><colgroup><col style="width:17%"><col></colgroup><tr><th>용&nbsp;&nbsp;&nbsp;&nbsp;도</th><td class="l">' + esc(d.purpose) + '</td></tr></table>' +
+    '<div class="msg">위 사람은 대구광역시 중구지역사회보장협의체 ' + esc(d.sentenceOrg) + ' 위원으로<br>위와 같이 활동하였음을 확인합니다.</div>' +
+    '<div class="dt">' + dp[0] + '년&nbsp;&nbsp;' + (+dp[1]) + '월&nbsp;&nbsp;' + (+dp[2]) + '일</div>' +
+    '<div class="sign">대구광역시 중구지역사회보장협의체 위원장' + (seal ? '<img src="' + seal + '" alt="">' : '<span class="seal">(직인)</span>') + '</div></div>';
+  document.getElementById('pages').innerHTML = h;
+  document.getElementById('print').style.display = 'block';
 }
 function reasonFields() { return '<label class="f w2">사유<input id="x_reason" placeholder="예: 기관 인사이동, 분과 회의 결정"></label><label class="f w2">근거<input id="x_basis" placeholder="예: 제3차 대표협의체 회의, 복지정책과-1234(2026.3.2.)"></label>'; }
 
