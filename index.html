@@ -157,8 +157,8 @@ function showLogin(msg) {
 }
 function doLogin() {
   call('login', [v('lg_id'), document.getElementById('lg_pw').value], function (res) {
-    var o = JSON.parse(res); S.token = o.token; S.mustChange = o.mustChange;
-    try { sessionStorage.setItem('rosterToken', o.token); } catch (e) {}
+    var o = JSON.parse(res); S.token = o.token; S.mustChange = o.mustChange; S.myId = o.id;
+    try { sessionStorage.setItem('rosterToken', o.token); sessionStorage.setItem('rosterId', o.id); } catch (e) {}
     loadData();
   });
 }
@@ -176,14 +176,14 @@ function loadUsers() {
   call('listUsers', [], function (res) {
     var list = JSON.parse(res), el = document.getElementById('users'); if (!el) return;
     el.innerHTML = '<table class="t"><tr><th>아이디</th><th>이름</th><th>권한</th><th></th></tr>' + list.map(function (u) {
-      return '<tr><td>' + esc(u.id) + '</td><td>' + esc(u.name) + '</td><td>' + (u.role === 'admin' ? '관리자' : '조회 전용') + '</td><td><button class="b s" onclick="formUser(\'' + esc(u.id) + '\',\'' + esc(u.name) + '\',\'' + u.role + '\')">비밀번호 재설정</button> ' + (u.role === 'admin' ? '' : '<button class="b s d" onclick="if(confirm(\'' + esc(u.id) + ' 계정을 지울까요?\'))call(\'deleteUser\',[\'' + esc(u.id) + '\'],function(m){toast(m);loadUsers()})">삭제</button>') + '</td></tr>';
+      return '<tr><td>' + esc(u.id) + '</td><td>' + esc(u.name) + '</td><td>' + (u.role === 'admin' ? '관리자' : '조회 전용') + '</td><td><button class="b s" onclick="formUser(\'' + esc(u.id) + '\',\'' + esc(u.name) + '\',\'' + u.role + '\')">비밀번호 재설정</button> ' + (u.id === S.myId ? '<span class="muted">(나)</span>' : '<button class="b s d" onclick="if(confirm(\'' + esc(u.id) + ' 계정을 지울까요?\'))call(\'deleteUser\',[\'' + esc(u.id) + '\'],function(m){toast(m);loadUsers()})">삭제</button>') + '</td></tr>';
     }).join('') + '</table>';
   }, true);
 }
 function formUser(id, name, role) {
-  openModal('<h3>' + (id ? '비밀번호 재설정' : '조회 계정 만들기 (결재권자용)') + '</h3><div class="form"><label class="f">아이디 (영문·숫자)<input id="u_id" value="' + esc(id || '') + '"' + (id ? ' readonly' : '') + '></label><label class="f">이름<input id="u_name" value="' + esc(name || '') + '" placeholder="예: 복지정책과장"></label>' +
+  openModal('<h3>' + (id ? '비밀번호 재설정' : (role === 'admin' ? '관리자 계정 만들기' : '조회 계정 만들기 (결재권자용)')) + '</h3><div class="form"><label class="f">아이디 (영문·숫자)<input id="u_id" value="' + esc(id || '') + '"' + (id ? ' readonly' : '') + '></label><label class="f">이름<input id="u_name" value="' + esc(name || '') + '" placeholder="예: 복지정책과장"></label>' +
     '<label class="f">권한<select id="u_role">' + opts([['viewer', '조회 전용'], ['admin', '관리자']], role || 'viewer') + '</select></label><label class="f">' + (id ? '새 ' : '') + '임시 비밀번호 (8자 이상)<input id="u_pw"></label></div>' +
-    '<div class="muted">임시 비밀번호를 직접 전달해 주세요. 처음 로그인하면 바꾸라는 안내가 나옵니다.</div><div class="actions"><button class="b" onclick="closeModal()">취소</button><button class="b p" onclick="call(\'saveUser\',[{id:v(\'u_id\'),name:v(\'u_name\'),role:v(\'u_role\'),password:v(\'u_pw\')}],function(m){toast(m);closeModal();loadUsers()})">저장</button></div>');
+    '<div class="muted">임시 비밀번호를 직접 전달해 주세요. 처음 로그인하면 바꾸라는 안내가 나옵니다. 아이디는 바꿀 수 없으니, 바꾸려면 새 관리자 계정을 만들어 그 계정으로 로그인한 뒤 예전 계정을 지우세요.</div><div class="actions"><button class="b" onclick="closeModal()">취소</button><button class="b p" onclick="call(\'saveUser\',[{id:v(\'u_id\'),name:v(\'u_name\'),role:v(\'u_role\'),password:v(\'u_pw\')}],function(m){toast(m);closeModal();loadUsers()})">저장</button></div>');
 }
 
 // ---------- 화면 ----------
@@ -362,7 +362,7 @@ function vSettings() {
   h += '</div><div class="card"><h2>표창 종류</h2><div class="bar">' + S.db.awardTypes.map(function (t) { return '<span class="tag st-기타" style="font-size:14px;padding:4px 9px">' + esc(t.name) + '</span>'; }).join('') +
     (S.canEdit ? '<input id="nat" placeholder="예: 대구광역시의회의장상" style="width:200px"><button class="b s" onclick="op(\'addAwardType\',{name:v(\'nat\')})">추가</button>' : '') + '</div></div>';
   h += '<div class="card"><h2>임기만료 알림</h2><div class="bar">임기 종료일 <input type="number" min="7" max="365" value="' + S.expireDays + '" style="width:80px" onchange="S.expireDays=+this.value||60;try{localStorage.setItem(\'expireDays\',S.expireDays)}catch(e){}"> 일 전부터 처음 화면에 알립니다.</div></div>';
-  if (S.canEdit) { h += '<div class="card"><h2>로그인 계정 (결재권자 공유)</h2><div class="muted" style="margin-bottom:8px">조회 전용 계정은 명단 조회·출력만 할 수 있고 회의수당 계좌는 보이지 않습니다.</div><div id="users" class="scroll">불러오는 중...</div><div class="actions"><button class="b p" onclick="formUser()">+ 조회 계정 만들기</button></div></div>'; setTimeout(loadUsers, 0); }
+  if (S.canEdit) { h += '<div class="card"><h2>로그인 계정 (결재권자 공유)</h2><div class="muted" style="margin-bottom:8px">조회 전용 계정은 명단 조회·출력만 할 수 있고 회의수당 계좌는 보이지 않습니다.</div><div id="users" class="scroll">불러오는 중...</div><div class="actions"><button class="b" onclick="formUser(\'\',\'\',\'admin\')">+ 관리자 계정 만들기</button><button class="b p" onclick="formUser()">+ 조회 계정 만들기</button></div></div>'; setTimeout(loadUsers, 0); }
   return h;
 }
 
@@ -518,7 +518,7 @@ function xlsxHistory() {
 
 // ---------- 시작 ----------
 document.getElementById('modal').addEventListener('click', function (e) { if (e.target.id === 'modal') closeModal(); });
-try { S.token = sessionStorage.getItem('rosterToken') || ''; } catch (e) {}
+try { S.token = sessionStorage.getItem('rosterToken') || ''; S.myId = sessionStorage.getItem('rosterId') || ''; } catch (e) {}
 if (S.token) loadData(); else showLogin();
 </script>
 </body>
