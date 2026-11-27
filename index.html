@@ -341,10 +341,11 @@ function vImport() {
     '<div class="bar"><button class="b" onclick="xlsxTemplate()">등록 양식 내려받기</button><label class="b" style="display:inline-block">엑셀 파일 선택<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="readImport(this.files[0])"></label></div></div>';
   if (S.importRows) {
     var r = S.importRows;
-    h += '<div class="card"><h2>미리보기 (' + r.length + '줄)</h2><div class="form"><label class="f w2">등록 사유<input id="ir" value="기존 명단 일괄 등록"></label><label class="f w2">근거<input id="ib" placeholder="예: 2026년 위원 명단(한글 파일)"></label></div>' +
+    var okN = r.filter(function (x) { return !importProblem(x); }).length;
+    h += '<div class="card"><h2>미리보기 (' + r.length + '줄)</h2><div class="readonly-note">아직 등록되지 않았습니다. 내용을 확인하고 <b>[' + okN + '명 등록]</b> 버튼을 눌러야 저장됩니다.</div><div class="actions" style="justify-content:flex-start;margin-bottom:10px"><button class="b p" onclick="doImport()">' + okN + '명 등록</button><button class="b" onclick="S.importRows=null;render()">취소</button></div><div class="form"><label class="f w2">등록 사유<input id="ir" value="기존 명단 일괄 등록"></label><label class="f w2">근거<input id="ib" placeholder="예: 2026년 위원 명단(한글 파일)"></label></div>' +
       '<div class="scroll"><table class="t"><tr><th>#</th><th>협의체 구분</th><th>분과/동</th><th>성명</th><th>소속</th><th>직위</th><th>휴대폰</th><th>직책</th><th>위촉구분</th><th>임기</th><th>확인</th></tr>' + r.map(function (x, i) { var p = importProblem(x);
         return '<tr><td>' + (i + 1) + '</td><td>' + esc(x.orgType) + '</td><td>' + esc(x.orgName) + '</td><td>' + esc(x.name) + '</td><td>' + esc(x.agency) + '</td><td>' + esc(x.position) + '</td><td>' + esc(x.mobile) + '</td><td>' + esc(x.role) + '</td><td>' + esc(x.kind) + '</td><td>' + esc(x.termStart) + ' ~ ' + esc(x.termEnd) + '</td><td>' + (p ? '<span style="color:var(--red)">' + esc(p) + '</span>' : '<span style="color:var(--green)">정상</span>') + '</td></tr>'; }).join('') +
-      '</table></div><div class="actions"><button class="b" onclick="S.importRows=null;render()">취소</button><button class="b p" onclick="doImport()">등록</button></div></div>';
+      '</table></div><div class="actions"><button class="b" onclick="S.importRows=null;render()">취소</button><button class="b p" onclick="doImport()">' + okN + '명 등록</button></div></div>';
   }
   return h;
 }
