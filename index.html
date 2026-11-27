@@ -129,8 +129,8 @@
 <div id="toast"></div>
 <div id="loading">처리 중입니다...</div>
 
-<script src="logic.js?v=20261127c"></script>
-<script src="config.js?v=20261127c"></script>
+<script src="logic.js?v=20261127d"></script>
+<script src="config.js?v=20261127d"></script>
 
 <script>
 var S = { db:null, today:'', user:'', canEdit:false, view:'home',
@@ -348,9 +348,10 @@ function vAwards() {
     '<label class="f">수여 행사<select onchange="S.af.event=this.value;render()">' + opts(events, f.event, '전체') + '</select></label>' +
     '<label class="f">표창명<select onchange="S.af.name=this.value;render()">' + opts(names, f.name, '전체') + '</select></label>' +
     '<label class="f">훈격<select onchange="S.af.type=this.value;render()">' + opts(types, f.type, '전체') + '</select></label><span class="sp"></span>' +
-    (S.canEdit ? '<button class="b p" onclick="formAward()">+ 표창 등록</button><button class="b" onclick="formAwardImport()">표창 일괄 등록</button>' : '') + '<button class="b" onclick="xlsxAwards()">엑셀 내려받기</button></div>';
-  h += '<div class="muted" style="margin-bottom:6px">' + rows.length + '건</div><div class="scroll"><table class="t"><tr><th>연도</th><th>수여 행사</th><th>표창명</th><th>훈격</th><th>성명</th><th>소속</th><th>위원 여부</th><th>공적</th><th>비고</th></tr>' + (rows.map(function (w) { var p = L_awardPerson(S.db, w);
-    return '<tr' + (p.isMember ? ' class="click" onclick="showMember(\'' + w.memberId + '\')"' : (S.canEdit ? ' class="click" onclick="formCancelAward(\'' + w.id + '\')"' : '')) + '><td>' + w.year + '</td><td>' + esc(w.event) + '</td><td>' + esc(w.awardName) + '</td><td><b>' + esc(w.awardType) + '</b></td><td>' + esc(p.name) + '</td><td>' + esc([p.agency, p.position].filter(Boolean).join(' ')) + '</td><td>' + (p.isMember ? '<span class="tag st-재직">위원</span> <span class="muted">' + esc(w.orgAtTime) + '</span>' : '<span class="tag st-기타">위원 아님</span>') + '</td><td>' + esc(w.title) + '</td><td>' + esc(w.memo) + '</td></tr>'; }).join('') || '<tr><td colspan="9" class="muted">해당 기록이 없습니다.</td></tr>') + '</table></div></div>';
+    (S.canEdit ? '<button class="b p" onclick="formAward()">+ 표창 등록</button><button class="b" onclick="formAwardImport()">표창 일괄 등록</button><button class="b" onclick="formDedupe()">중복 정리</button>' : '') + '<button class="b" onclick="xlsxAwards()">엑셀 내려받기</button></div>';
+  var filtered = f.year || f.type || f.event || f.name;
+  h += '<div class="bar" style="margin-bottom:6px"><span class="muted">' + rows.length + '건</span>' + (S.canEdit && filtered && rows.length ? '<span class="sp"></span><button class="b s d" onclick="formDeleteShown()">지금 보이는 ' + rows.length + '건 삭제</button>' : '') + '</div><div class="scroll"><table class="t"><tr><th>연도</th><th>수여 행사</th><th>표창명</th><th>훈격</th><th>성명</th><th>소속</th><th>위원 여부</th><th>공적</th><th>비고</th>' + (S.canEdit ? '<th></th>' : '') + '</tr>' + (rows.map(function (w) { var p = L_awardPerson(S.db, w);
+    return '<tr' + (p.isMember ? ' class="click" onclick="showMember(\'' + w.memberId + '\')"' : (S.canEdit ? ' class="click" onclick="formEditAward(\'' + w.id + '\')"' : '')) + '><td>' + w.year + '</td><td>' + esc(w.event) + '</td><td>' + esc(w.awardName) + '</td><td><b>' + esc(w.awardType) + '</b></td><td>' + esc(p.name) + '</td><td>' + esc([p.agency, p.position].filter(Boolean).join(' ')) + '</td><td>' + (p.isMember ? '<span class="tag st-재직">위원</span> <span class="muted">' + esc(w.orgAtTime) + '</span>' : '<span class="tag st-기타">위원 아님</span>') + '</td><td>' + esc(w.title) + '</td><td>' + esc(w.memo) + '</td>' + (S.canEdit ? '<td><button class="b s" onclick="event.stopPropagation();formEditAward(\'' + w.id + '\')">수정·삭제</button></td>' : '') + '</tr>'; }).join('') || '<tr><td colspan="10" class="muted">해당 기록이 없습니다.</td></tr>') + '</table></div></div>';
   return h;
 }
 
@@ -358,7 +359,7 @@ function vImport() {
   var h = '<div class="card"><h2>기존 명단 일괄 등록</h2><ol class="muted" style="line-height:1.8;margin-top:0">' +
     '<li>아래 [등록 양식 내려받기]로 엑셀 양식을 받습니다.</li><li>한글 명단의 표를 복사해 양식에 붙여 넣고, 협의체 구분·분과명·임기를 채웁니다.</li>' +
     '<li>[엑셀 파일 선택]으로 올리면 미리보기가 나옵니다. 확인 후 [등록]을 누릅니다.</li></ol>' +
-    '<div class="bar"><button class="b" onclick="xlsxTemplate()">등록 양식 내려받기</button><label class="b" style="display:inline-block">엑셀 파일 선택<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="readImport(this.files[0])"></label></div></div>';
+    '<div class="bar"><button class="b" onclick="xlsxTemplate()">등록 양식 내려받기</button><button class="b" onclick="formDedupe()">중복 정리</button><label class="b" style="display:inline-block">엑셀 파일 선택<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="readImport(this.files[0])"></label></div></div>';
   if (S.importRows) {
     var r = S.importRows;
     var okN = r.filter(function (x) { return !importProblem(x); }).length;
@@ -441,7 +442,7 @@ function showMember(id) {
     return '<tr><td>' + esc(a.orgType === a.orgName ? a.orgName : a.orgType + ' · ' + a.orgName) + '</td><td>' + esc(a.role) + '</td><td>' + esc(a.kind) + '</td><td>' + (a.termStart || a.termEnd ? fmt(a.termStart) + ' ~ ' + fmt(a.termEnd) : '<span class="muted">임기 없음</span>') + '</td><td class="muted">' + fmt(a.from) + ' ~ ' + fmt(a.endDate) + '</td><td>' + stTag(st) + '</td>' + act + '</tr>';
   }).join('') + '</table></div>' + (S.canEdit ? '<div class="actions"><button class="b p" onclick="formAppoint(\'' + id + '\')">+ 다른 협의체에 추가 위촉</button></div>' : '') + '</div>';
   h += '<div class="card"><h2>유공표창</h2>' + (aw.length ? '<table class="t"><tr><th>연도</th><th>수여 행사·표창명</th><th>훈격</th><th>공적</th><th>당시 소속</th><th></th></tr>' + aw.map(function (w) {
-    return '<tr' + (w.canceled ? ' style="text-decoration:line-through;color:#999"' : '') + '><td>' + w.year + '</td><td>' + esc([w.event, w.awardName].filter(Boolean).join(' · ')) + '</td><td><b>' + esc(w.awardType) + '</b></td><td>' + esc(w.title) + '</td><td>' + esc(w.orgAtTime) + '</td><td>' + (w.canceled ? '취소됨' : (S.canEdit ? '<button class="b s d" onclick="formCancelAward(\'' + w.id + '\')">취소</button>' : '')) + '</td></tr>'; }).join('') + '</table>' : '<div class="muted">기록이 없습니다.</div>') +
+    return '<tr' + (w.canceled ? ' style="text-decoration:line-through;color:#999"' : '') + '><td>' + w.year + '</td><td>' + esc([w.event, w.awardName].filter(Boolean).join(' · ')) + '</td><td><b>' + esc(w.awardType) + '</b></td><td>' + esc(w.title) + '</td><td>' + esc(w.orgAtTime) + '</td><td>' + (w.canceled ? '취소됨' : (S.canEdit ? '<button class="b s" onclick="formEditAward(\'' + w.id + '\')">수정·삭제</button>' : '')) + '</td></tr>'; }).join('') + '</table>' : '<div class="muted">기록이 없습니다.</div>') +
     (S.canEdit ? '<div class="actions"><button class="b" onclick="formAward(\'' + id + '\')">+ 표창 등록</button></div>' : '') + '</div>';
   var certs = (S.db.certs || []).filter(function (c) { return c.memberId === id; }).sort(function (a, b) { return a.createdAt < b.createdAt ? 1 : -1; });
   h += '<div class="card"><h2>활동확인서 · 위촉동의서</h2>' + (certs.length ? '<table class="t"><tr><th>발급번호</th><th>발급일</th><th>용도</th><th>처리자</th><th></th></tr>' + certs.map(function (c) {
@@ -732,6 +733,30 @@ function readAwardImport(file) {
   rd.readAsArrayBuffer(file);
 }
 
+function formEditAward(wid) {
+  if (!needEdit()) return;
+  var w = L_find(S.db.awards, wid), p = L_awardPerson(S.db, w);
+  var h = '<h3>표창 기록 수정 <span class="muted">' + esc(p.name) + (p.isMember ? ' (위원)' : ' (위원 아님)') + '</span></h3><div class="form">';
+  if (!p.isMember) h += '<label class="f">성명 *<input id="e_pname" value="' + esc(w.personName) + '"></label><label class="f">소속<input id="e_pagency" value="' + esc(w.personAgency) + '"></label><label class="f">직위<input id="e_ppos" value="' + esc(w.personPosition) + '"></label>';
+  h += '<label class="f">수상 연도 *<input id="e_year" value="' + esc(w.year) + '"></label><label class="f">수상일<input id="e_date" type="date" value="' + esc(w.date) + '"></label>' +
+    '<label class="f">수여 행사<input id="e_event" list="dl_ev" value="' + esc(w.event) + '"></label><label class="f">표창명<input id="e_name" list="dl_nm" value="' + esc(w.awardName) + '"></label><label class="f">훈격 *<input id="e_type" list="dl_ty" value="' + esc(w.awardType) + '"></label>' +
+    '<label class="f w2">공적<input id="e_title" value="' + esc(w.title) + '"></label><label class="f w2">비고<input id="e_memo" value="' + esc(w.memo) + '"></label></div>' +
+    '<datalist id="dl_ev">' + AWARD_EVENTS.map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist><datalist id="dl_nm">' + AWARD_NAMES.map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist><datalist id="dl_ty">' + S.db.awardTypes.map(function (x) { return '<option value="' + esc(x.name) + '">'; }).join('') + '</datalist>' +
+    '<div class="actions"><button class="b d" style="margin-right:auto" onclick="if(confirmBox(\'이 표창 기록을 지울까요? 잘못 넣은 기록일 때만 지워 주세요.\'))op(\'deleteAward\',{id:\'' + wid + '\'})">삭제</button><button class="b" onclick="closeModal()">취소</button>' +
+    '<button class="b p" onclick="op(\'editAward\',{id:\'' + wid + '\',personName:v(\'e_pname\'),personAgency:v(\'e_pagency\'),personPosition:v(\'e_ppos\'),year:v(\'e_year\'),date:v(\'e_date\'),event:v(\'e_event\'),awardName:v(\'e_name\'),awardType:v(\'e_type\'),title:v(\'e_title\'),memo:v(\'e_memo\')})">저장</button></div>';
+  openModal(h);
+}
+function formDeleteShown() {
+  var rows = awardRows(), f = S.af;
+  openModal('<h3>표창 기록 ' + rows.length + '건 삭제</h3><p>지금 걸러 본 조건(' + esc([f.year && f.year + '년', f.event, f.name, f.type].filter(Boolean).join(' · ')) + ')에 맞는 표창 기록 <b>' + rows.length + '건</b>을 지웁니다. 잘못 등록한 기록을 한꺼번에 지울 때만 써 주세요.</p>' +
+    '<div class="actions"><button class="b" onclick="closeModal()">취소</button><button class="b p d" onclick="op(\'deleteAwards\',{ids:awardRows().map(function(w){return w.id;})})">' + rows.length + '건 삭제</button></div>');
+}
+function formDedupe() {
+  if (!needEdit()) return;
+  var c = L_findDups(S.db).counts;
+  if (!c.appts && !c.awards && !c.history) return alertMsg('중복된 기록이 없습니다.');
+  openModal('<h3>중복 정리</h3><p>일괄 등록을 여러 번 올려 <b>똑같이 두 번 이상 들어간 기록</b>을 찾았습니다. 처음 들어간 것만 남기고 나머지를 지웁니다.</p><ul style="line-height:1.9"><li>위촉(명단) 중복: <b>' + c.appts + '건</b></li><li>표창 중복: <b>' + c.awards + '건</b></li><li>변동이력 중복: <b>' + c.history + '건</b></li></ul><div class="muted">위원 인적사항과 계좌는 건드리지 않습니다.</div><div class="actions"><button class="b" onclick="closeModal()">취소</button><button class="b p" onclick="op(\'dedupe\',{})">중복 정리하기</button></div>');
+}
 function formCancelAward(wid) {
   var w = L_find(S.db.awards, wid);
   openModal('<h3>표창 기록 취소</h3><p>' + esc(L_awardPerson(S.db, w).name) + ' · ' + esc(L_awardText(w)) + ' 기록을 취소 표시합니다. 기록은 지워지지 않고 취소선으로 남습니다.</p><div class="form">' + reasonFields() + '</div><div class="actions"><button class="b" onclick="showMember(\'' + w.memberId + '\')">돌아가기</button><button class="b p d" onclick="op(\'cancelAward\',{id:\'' + wid + '\',reason:v(\'x_reason\'),basis:v(\'x_basis\')},function(){showMember(\'' + w.memberId + '\')})">취소 처리</button></div>');

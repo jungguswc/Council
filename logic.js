@@ -9,7 +9,7 @@ var ORG_TYPES = ['대표협의체', '실무협의체', '실무분과', '전문�
 var NO_TERM_ORGS = ['실무분과'];
 var KINDS = ['당연직', '임명직', '위촉직'];
 var ROLES = ['위원장', '공동위원장', '부위원장', '분과장', '간사', '총무', '위원'];
-var CHANGE_TYPES = ['위촉', '해촉', '사임', '연임', '직책변경', '소속변경', '정보수정', '위촉정정', '일괄등록', '표창등록', '표창취소', '계좌변경', '확인서발급'];
+var CHANGE_TYPES = ['위촉', '해촉', '사임', '연임', '직책변경', '소속변경', '정보수정', '위촉정정', '일괄등록', '표창등록', '표창취소', '계좌변경', '확인서발급', '표창수정', '표창삭제'];
 
 var TABLES = {
   members: ['id', 'name', 'agency', 'position', 'mobile', 'office', 'fax', 'email', 'address', 'memo', 'createdAt', 'updatedAt'],
@@ -391,6 +391,46 @@ var L_OPS = {
     L_log(db, ctx, { date: d, memberId: m.id, apptId: c.apptId, type: '확인서발급', reason: c.purpose, after: no });
     return { msg: no + ' 위원 활동 확인서를 발급했습니다.', changed: ['certs', 'history'] };
   },
+  /** 중복 정리 (일괄 등록을 여러 번 올린 경우) */
+  dedupe: function (db, ctx, x) {
+    var d = L_findDups(db), c = d.counts;
+    if (!c.appts && !c.awards && !c.history) L_fail('정리할 중복이 없습니다.');
+    db.appts = db.appts.filter(function (a) { return !d.appts[a.id]; });
+    db.awards = db.awards.filter(function (w) { return !d.awards[w.id]; });
+    db.history = db.history.filter(function (h) { return !d.history[h.id]; });
+    return { msg: '중복을 정리했습니다. 위촉 ' + c.appts + '건, 표창 ' + c.awards + '건, 이력 ' + c.history + '건을 지웠습니다.', changed: ['appts', 'awards', 'history'] };
+  },
+  /** 표창 기록 수정 */
+  editAward: function (db, ctx, x) {
+    var w = L_find(db.awards, x.id); if (!w) L_fail('표창 기록을 찾을 수 없습니다.');
+    var before = L_awardText(w), y = L_trim(x.year).replace(/\D/g, ''), t = L_trim(x.awardType);
+    if (!/^\d{4}$/.test(y)) L_fail('수상 연도를 입력해 주세요(예: 2026).');
+    if (!t) L_fail('훈격을 입력해 주세요.');
+    if (!w.memberId && !L_trim(x.personName)) L_fail('수상자 성명을 입력해 주세요.');
+    if (!db.awardTypes.some(function (a) { return a.name === t; })) db.awardTypes.push({ id: L_nextId(db.awardTypes, 'T'), name: t, order: String(db.awardTypes.length + 1) });
+    w.year = y; w.date = L_normDate(x.date) || ''; w.event = L_trim(x.event); w.awardName = L_trim(x.awardName); w.awardType = t; w.title = L_trim(x.title); w.memo = L_trim(x.memo);
+    if (!w.memberId) { w.personName = L_trim(x.personName).replace(/\s+/g, ''); w.personAgency = L_trim(x.personAgency); w.personPosition = L_trim(x.personPosition); }
+    var p = L_awardPerson(db, w);
+    L_log(db, ctx, { date: ctx.today, memberId: w.memberId, type: '표창수정', reason: x.reason, before: before, after: L_awardText(w) + (w.memberId ? '' : ' / ' + p.name) });
+    return { msg: p.name + ' 표창 기록을 고쳤습니다.', changed: ['awards', 'history', 'awardTypes'] };
+  },
+  /** 잘못 넣은 표창 기록 여러 건 삭제 */
+  deleteAwards: function (db, ctx, x) {
+    var ids = x.ids || [], n = 0;
+    ids.forEach(function (id) { var w = L_find(db.awards, id); if (!w) return; var p = L_awardPerson(db, w);
+      db.awards = db.awards.filter(function (a) { return a.id !== id; }); n++;
+      L_log(db, ctx, { date: ctx.today, memberId: w.memberId, type: '표창삭제', reason: x.reason || '잘못 입력', before: L_awardText(w) + (w.memberId ? '' : ' / ' + p.name) }); });
+    if (!n) L_fail('지울 표창 기록이 없습니다.');
+    return { msg: '표창 기록 ' + n + '건을 지웠습니다.', changed: ['awards', 'history'] };
+  },
+  /** 잘못 넣은 표창 기록 삭제 */
+  deleteAward: function (db, ctx, x) {
+    var w = L_find(db.awards, x.id); if (!w) L_fail('표창 기록을 찾을 수 없습니다.');
+    var p = L_awardPerson(db, w);
+    db.awards = db.awards.filter(function (a) { return a.id !== w.id; });
+    L_log(db, ctx, { date: ctx.today, memberId: w.memberId, type: '표창삭제', reason: x.reason || '잘못 입력', before: L_awardText(w) + (w.memberId ? '' : ' / ' + p.name) });
+    return { msg: p.name + ' ' + w.year + '년 표창 기록을 지웠습니다.', changed: ['awards', 'history'] };
+  },
   /** 협의체·분과·동 추가 */
   addOrg: function (db, ctx, x) {
     var t = L_trim(x.orgType), n = L_trim(x.name);
@@ -423,6 +463,21 @@ function L_newAward(db, ctx, x) {
     personName: m ? '' : L_trim(x.personName).replace(/\s+/g, ''), personAgency: m ? '' : L_trim(x.personAgency), personPosition: m ? '' : L_trim(x.personPosition) };
   db.awards.push(w);
   return w;
+}
+/** 일괄 등록을 여러 번 올려 생긴 중복 찾기: 같은 내용의 위촉·표창·이력 중 처음 것만 남긴다 */
+function L_findDups(db) {
+  function dupIds(list, keyFn, ok) {
+    var seen = {}, out = {};
+    list.forEach(function (x) { if (ok && !ok(x)) return; var k = keyFn(x); if (seen[k]) out[x.id] = seen[k]; else seen[k] = x.id; });
+    return out;
+  }
+  var appts = dupIds(db.appts, function (a) { return [a.memberId, a.orgType, a.orgName, a.termStart, a.termEnd, a.from, a.endDate, a.role, a.kind].join('|'); });
+  var awards = dupIds(db.awards, function (w) { return [w.memberId || ('p:' + String(w.personName).replace(/\s/g, '')), w.year, w.event, w.awardName, w.awardType].join('|'); }, function (w) { return !w.canceled; });
+  var hist = {};
+  db.history.forEach(function (h) { if (h.apptId && appts[h.apptId]) hist[h.id] = 1; });
+  var hd = dupIds(db.history, function (h) { return [h.memberId, h.type, h.date, h.after, h.reason].join('|'); }, function (h) { return !hist[h.id] && (h.type === '일괄등록' || h.type === '표창등록'); });
+  for (var k in hd) hist[k] = 1;
+  return { appts: appts, awards: awards, history: hist, counts: { appts: Object.keys(appts).length, awards: Object.keys(awards).length, history: Object.keys(hist).length } };
 }
 /** 수상자 정보: 위원이면 위원 정보, 아니면 표창에 적힌 정보 */
 function L_awardPerson(db, w) {
